@@ -15,7 +15,7 @@
 provider: openai
 version: 1
 source: https://developers.openai.com/api/docs/deprecations
-verified: 2026-07-23
+verified: 2026-09-28
 models:
   # ── retired: the API no longer serves these ───────────────────────────────
   - id: gpt-4-32k
@@ -360,6 +360,55 @@ models:
     announced: 2026-07-20
     shutdown: 2027-01-20
     replacement: gpt-audio-1.5
+
+  # Missed when this file was last verified: announced in the same 2026-07-20
+  # batch as gpt-audio above. Its own retirement (2027-01-20) is EARLIER than
+  # the gpt-4o-mini-transcribe line's (2027-02-26, below), which is why a
+  # snapshot record has to be reachable in its own right.
+  - id: gpt-4o-mini-transcribe-2025-03-20
+    state: deprecated
+    announced: 2026-07-20
+    shutdown: 2027-01-20
+    replacement: gpt-4o-mini-transcribe-2025-12-15
+
+  # ── announced 2026-08-26: the speech-to-text line ─────────────────────────
+  # Upstream offers two replacements ("gpt-live-transcribe or gpt-transcribe");
+  # recorded as the first, the convention dall-e-2 already follows above.
+  #
+  # No rule matches whisper-1 today, so that record cannot fire yet: the value
+  # alternation in rules/models/openai.yaml covers gpt-*, chatgpt-* and
+  # o1/o3/o4 only. The fact is true regardless, and the record is here for when
+  # the pattern catches up.
+  - id: whisper-1
+    state: deprecated
+    announced: 2026-08-26
+    shutdown: 2027-02-26
+    replacement: gpt-live-transcribe
+
+  - id: gpt-4o-transcribe
+    state: deprecated
+    announced: 2026-08-26
+    shutdown: 2027-02-26
+    replacement: gpt-live-transcribe
+
+  - id: gpt-4o-mini-transcribe
+    state: deprecated
+    announced: 2026-08-26
+    shutdown: 2027-02-26
+    replacement: gpt-live-transcribe
+
+  - id: gpt-4o-transcribe-diarize
+    state: deprecated
+    announced: 2026-08-26
+    shutdown: 2027-02-26
+    replacement: gpt-live-transcribe
+
+  # ── announced 2026-09-11 ──────────────────────────────────────────────────
+  - id: gpt-5.4-cyber
+    state: deprecated
+    announced: 2026-09-11
+    shutdown: 2026-10-01
+    replacement: gpt-5.6-cyber
 
   # NOTE: no "supported" records here. The source below is a DEPRECATIONS page:
   # it can only ever substantiate that a model is deprecated. Absence from a

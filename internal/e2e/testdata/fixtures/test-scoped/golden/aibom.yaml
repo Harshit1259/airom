@@ -2,14 +2,14 @@ components:
   - confidence: 0.85
     eol:
       announced: "2024-09-04"
-      daysRemaining: -633
+      daysRemaining: -692
       replacement: claude-haiku-4-5-20251001
       replacementState: supported
       shutdown: "2024-11-06"
       source: airom-catalog
       sourceUrl: https://platform.claude.com/docs/en/docs/about-claude/model-deprecations
       state: retired
-      verified: "2026-07-23"
+      verified: "2026-09-28"
     evidence:
       occurrences:
         - confidence: 0.85
@@ -243,13 +243,13 @@ components:
   - confidence: 0.85
     eol:
       announced: "2024-06-06"
-      daysRemaining: -421
+      daysRemaining: -480
       replacement: gpt-4o
       shutdown: "2025-06-06"
       source: airom-catalog
       sourceUrl: https://developers.openai.com/api/docs/deprecations
       state: retired
-      verified: "2026-07-23"
+      verified: "2026-09-28"
     evidence:
       occurrences:
         - confidence: 0.85
@@ -561,7 +561,7 @@ stats:
     - 'project/raglink: selected by "default"'
     - 'prompt/file: selected by "default"'
     - 'ruleengine: selected by "default"'
-timestamp: "2026-08-01T12:00:00Z"
+timestamp: "2026-09-29T12:00:00Z"
 tool:
   eolCatalog: builtin
   name: airom

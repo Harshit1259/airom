@@ -3,7 +3,7 @@
   "@graph": [
     {
       "@id": "_:creationInfo",
-      "created": "2026-08-01T12:00:00Z",
+      "created": "2026-09-29T12:00:00Z",
       "createdBy": [
         "https://airom.dev/spdxdocs/00000000-0000-4000-8000-000000000000#Agent-airom"
       ],
@@ -79,7 +79,7 @@
       "type": "software_Package"
     },
     {
-      "comment": "airom:releaseTime NOASSERTION; airom:eol deprecated; shutdown 2026-08-05; replacement claude-opus-4-8; https://platform.claude.com/docs/en/docs/about-claude/model-deprecations; airom:param.max_tokens 64; airom:model.provider anthropic; airom:model.id claude-opus-4-1-20250805; airom:confidence 0.85; airom:evidence 1 occurrence(s); airom:kind hosted-llm",
+      "comment": "airom:releaseTime NOASSERTION; airom:eol retired; shutdown 2026-08-05; replacement claude-opus-4-8; https://platform.claude.com/docs/en/docs/about-claude/model-deprecations; airom:param.max_tokens 64; airom:model.provider anthropic; airom:model.id claude-opus-4-1-20250805; airom:confidence 0.85; airom:evidence 1 occurrence(s); airom:kind hosted-llm",
       "creationInfo": "_:creationInfo",
       "name": "claude-opus-4-1-20250805",
       "software_downloadLocation": "NOASSERTION",

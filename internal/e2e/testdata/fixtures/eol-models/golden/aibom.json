@@ -8,7 +8,7 @@
     "eolCatalog": "builtin"
   },
   "serial": "urn:uuid:00000000-0000-4000-8000-000000000000",
-  "timestamp": "2026-08-01T12:00:00Z",
+  "timestamp": "2026-09-29T12:00:00Z",
   "lifecycle": "pre-build",
   "source": {
     "kind": "dir",
@@ -81,7 +81,7 @@
         "state": "supported",
         "source": "airom-catalog",
         "sourceUrl": "https://platform.claude.com/docs/en/docs/about-claude/model-deprecations",
-        "verified": "2026-07-23"
+        "verified": "2026-09-28"
       }
     },
     {
@@ -124,11 +124,11 @@
         "state": "deprecated",
         "announced": "2026-04-22",
         "shutdown": "2026-10-23",
-        "daysRemaining": 83,
+        "daysRemaining": 24,
         "replacement": "gpt-5.6-sol",
         "source": "airom-catalog",
         "sourceUrl": "https://developers.openai.com/api/docs/deprecations",
-        "verified": "2026-07-23"
+        "verified": "2026-09-28"
       }
     },
     {
@@ -263,15 +263,15 @@
         }
       ],
       "eol": {
-        "state": "deprecated",
+        "state": "retired",
         "announced": "2026-06-05",
         "shutdown": "2026-08-05",
-        "daysRemaining": 4,
+        "daysRemaining": -55,
         "replacement": "claude-opus-4-8",
         "replacementState": "supported",
         "source": "airom-catalog",
         "sourceUrl": "https://platform.claude.com/docs/en/docs/about-claude/model-deprecations",
-        "verified": "2026-07-23"
+        "verified": "2026-09-28"
       }
     },
     {
@@ -468,11 +468,11 @@
         "state": "retired",
         "announced": "2024-06-06",
         "shutdown": "2025-06-06",
-        "daysRemaining": -421,
+        "daysRemaining": -480,
         "replacement": "gpt-4o",
         "source": "airom-catalog",
         "sourceUrl": "https://developers.openai.com/api/docs/deprecations",
-        "verified": "2026-07-23"
+        "verified": "2026-09-28"
       }
     }
   ],

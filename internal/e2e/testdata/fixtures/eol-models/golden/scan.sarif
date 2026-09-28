@@ -83,16 +83,16 @@
               "id": "eol/anthropic/claude-opus-4-1-20250805",
               "name": "EolAnthropicClaudeOpus4120250805",
               "shortDescription": {
-                "text": "claude-opus-4-1-20250805 is deprecated and stops serving requests on 2026-08-05."
+                "text": "claude-opus-4-1-20250805 was retired by its provider on 2026-08-05 and no longer serves requests."
               },
               "defaultConfiguration": {
-                "level": "warning"
+                "level": "error"
               },
               "helpUri": "https://platform.claude.com/docs/en/docs/about-claude/model-deprecations",
               "properties": {
                 "airom:eol.replacement": "claude-opus-4-8",
                 "airom:eol.shutdownDate": "2026-08-05",
-                "airom:eol.state": "deprecated"
+                "airom:eol.state": "retired"
               }
             },
             {
@@ -144,7 +144,7 @@
       "invocations": [
         {
           "executionSuccessful": true,
-          "endTimeUtc": "2026-08-01T12:00:00Z"
+          "endTimeUtc": "2026-09-29T12:00:00Z"
         }
       ],
       "results": [
@@ -598,7 +598,7 @@
           "ruleIndex": 7,
           "level": "warning",
           "message": {
-            "text": "gpt-4-turbo (openai) is deprecated — shuts down 2026-10-23 (83 days); migrate to gpt-5.6-sol"
+            "text": "gpt-4-turbo (openai) is deprecated — shuts down 2026-10-23 (24 days); migrate to gpt-5.6-sol"
           },
           "locations": [
             {
@@ -621,16 +621,16 @@
           ],
           "properties": {
             "airom:componentId": "airom:1b13aab20f840ad4",
-            "airom:eol.daysRemaining": 83,
+            "airom:eol.daysRemaining": 24,
             "airom:eol.state": "deprecated"
           }
         },
         {
           "ruleId": "eol/anthropic/claude-opus-4-1-20250805",
           "ruleIndex": 5,
-          "level": "warning",
+          "level": "error",
           "message": {
-            "text": "claude-opus-4-1-20250805 (anthropic) is deprecated — shuts down 2026-08-05 (4 days); migrate to claude-opus-4-8"
+            "text": "claude-opus-4-1-20250805 (anthropic) is retired — shut down 2026-08-05; migrate to claude-opus-4-8"
           },
           "locations": [
             {
@@ -653,9 +653,9 @@
           ],
           "properties": {
             "airom:componentId": "airom:76a548bfe1b671c7",
-            "airom:eol.daysRemaining": 4,
+            "airom:eol.daysRemaining": -55,
             "airom:eol.replacementState": "supported",
-            "airom:eol.state": "deprecated"
+            "airom:eol.state": "retired"
           }
         },
         {
@@ -686,7 +686,7 @@
           ],
           "properties": {
             "airom:componentId": "airom:be123ae014845a9f",
-            "airom:eol.daysRemaining": -421,
+            "airom:eol.daysRemaining": -480,
             "airom:eol.state": "retired"
           }
         }

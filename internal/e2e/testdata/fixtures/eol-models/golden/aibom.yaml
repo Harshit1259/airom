@@ -4,7 +4,7 @@ components:
       source: airom-catalog
       sourceUrl: https://platform.claude.com/docs/en/docs/about-claude/model-deprecations
       state: supported
-      verified: "2026-07-23"
+      verified: "2026-09-28"
     evidence:
       occurrences:
         - confidence: 0.85
@@ -49,13 +49,13 @@ components:
   - confidence: 0.85
     eol:
       announced: "2026-04-22"
-      daysRemaining: 83
+      daysRemaining: 24
       replacement: gpt-5.6-sol
       shutdown: "2026-10-23"
       source: airom-catalog
       sourceUrl: https://developers.openai.com/api/docs/deprecations
       state: deprecated
-      verified: "2026-07-23"
+      verified: "2026-09-28"
     evidence:
       occurrences:
         - confidence: 0.85
@@ -132,14 +132,14 @@ components:
   - confidence: 0.85
     eol:
       announced: "2026-06-05"
-      daysRemaining: 4
+      daysRemaining: -55
       replacement: claude-opus-4-8
       replacementState: supported
       shutdown: "2026-08-05"
       source: airom-catalog
       sourceUrl: https://platform.claude.com/docs/en/docs/about-claude/model-deprecations
-      state: deprecated
-      verified: "2026-07-23"
+      state: retired
+      verified: "2026-09-28"
     evidence:
       occurrences:
         - confidence: 0.85
@@ -292,13 +292,13 @@ components:
   - confidence: 0.85
     eol:
       announced: "2024-06-06"
-      daysRemaining: -421
+      daysRemaining: -480
       replacement: gpt-4o
       shutdown: "2025-06-06"
       source: airom-catalog
       sourceUrl: https://developers.openai.com/api/docs/deprecations
       state: retired
-      verified: "2026-07-23"
+      verified: "2026-09-28"
     evidence:
       occurrences:
         - confidence: 0.85
@@ -610,7 +610,7 @@ stats:
     - 'project/raglink: selected by "default"'
     - 'prompt/file: selected by "default"'
     - 'ruleengine: selected by "default"'
-timestamp: "2026-08-01T12:00:00Z"
+timestamp: "2026-09-29T12:00:00Z"
 tool:
   eolCatalog: builtin
   name: airom

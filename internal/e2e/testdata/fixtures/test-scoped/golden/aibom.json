@@ -8,7 +8,7 @@
     "eolCatalog": "builtin"
   },
   "serial": "urn:uuid:00000000-0000-4000-8000-000000000000",
-  "timestamp": "2026-08-01T12:00:00Z",
+  "timestamp": "2026-09-29T12:00:00Z",
   "lifecycle": "pre-build",
   "source": {
     "kind": "dir",
@@ -82,12 +82,12 @@
         "state": "retired",
         "announced": "2024-09-04",
         "shutdown": "2024-11-06",
-        "daysRemaining": -633,
+        "daysRemaining": -692,
         "replacement": "claude-haiku-4-5-20251001",
         "replacementState": "supported",
         "source": "airom-catalog",
         "sourceUrl": "https://platform.claude.com/docs/en/docs/about-claude/model-deprecations",
-        "verified": "2026-07-23"
+        "verified": "2026-09-28"
       }
     },
     {
@@ -400,11 +400,11 @@
         "state": "retired",
         "announced": "2024-06-06",
         "shutdown": "2025-06-06",
-        "daysRemaining": -421,
+        "daysRemaining": -480,
         "replacement": "gpt-4o",
         "source": "airom-catalog",
         "sourceUrl": "https://developers.openai.com/api/docs/deprecations",
-        "verified": "2026-07-23"
+        "verified": "2026-09-28"
       }
     },
     {

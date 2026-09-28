@@ -62,6 +62,15 @@ strict:
   at all. `unknown` means "nobody has curated this", never "this is fine".
 - **Matching is exact**, case-folded, with explicit aliases only. No prefix or
   fuzzy matching: a wrong retirement date is worse than no date.
+- **A pinned snapshot is matched against its own record, then its model line.**
+  The assembler stores `gpt-5-2025-08-07` as the line `gpt-5` plus version
+  `2025-08-07`, so that a pin and the floating alias are one component. The
+  overlay reassembles the id and asks about the snapshot first, because a
+  provider dates retirement against the snapshot and pinning one is exactly what
+  earns a shutdown date — `gpt-4o-mini-transcribe-2025-03-20` retires a month
+  before the line it belongs to. Both keys are still exact; only a `YYYY-MM-DD`
+  version is ever reattached, since anything else is a real version and gluing
+  it on would invent an id no provider published.
 - **Platforms are scoped.** Amazon Bedrock, Google Vertex, and Azure OpenAI
   publish their *own* schedules for the same weights, so their provider keys
   deliberately do not match these records.
