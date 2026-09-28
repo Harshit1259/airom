@@ -61,7 +61,7 @@ airom diff base.json head.json                           # what a PR changed
 
 | | |
 |---|---|
-| **Hosted models** | OpenAI, Anthropic, Gemini, Bedrock, Azure OpenAI, Cohere, Mistral, Groq. Model IDs and SDK call sites |
+| **Hosted models** | OpenAI, Anthropic, Gemini, Bedrock, Azure OpenAI, Cohere, Mistral, Groq. Model IDs and SDK call sites, including OpenAI's non-text lines (DALL·E, Sora, Whisper, moderation, computer-use) |
 | **Local weights** | GGUF, safetensors, ONNX, PyTorch, SavedModel, TFLite, HDF5, TensorRT. Identified by magic bytes and header parse, and **never loaded or run** |
 | **Frameworks** | LangChain, LlamaIndex, CrewAI, Agno, AutoGen, Semantic Kernel, CAMEL, MetaGPT, Letta, Crawl4AI, FastMCP, Transformers, and more |
 | **Local inference & training** | vLLM, llama.cpp, GPT4All, Ollama, DeepSpeed, Unsloth |
