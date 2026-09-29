@@ -25,7 +25,7 @@ binary, `CGO_ENABLED=0`, no daemon, no network unless the target requires it.
 
 ```
 airom
-├── scan <target>          # scheme auto-detect: dir | git URL | image ref (Syft-style)
+├── scan <target>          # scheme auto-detect: dir | git URL | image ref
 ├── fs <path>              # explicit nouns (scanner-style)
 ├── repo <url|path>
 ├── image <ref>            # --input tar, --platform; remote→daemon→tarball→layout chain
@@ -63,7 +63,7 @@ Every scan command accepts these. `<size>` values take `k`/`m`/`g` suffixes.
 |------|------|---------|-------------|
 | `-o, --output fmt[=path]` | string, repeatable | `table` | Output format with optional file destination. Formats: `table`, `json` (native airom-json), `cyclonedx`, `sarif`, `yaml`, `compliance` (a Markdown report of `--compliance` results. See [compliance.md](./compliance.md)), `vex` (an [OpenVEX](https://openvex.dev) 0.2.0 document over the CVE overlay. Every statement is `affected`, because AIROM does no reachability analysis and so has no grounds for `not_affected`; the upstream fixed version goes in `action_statement`, never a `fixed` status, which would assert this product was remediated when it is not), `spdx` (an [SPDX 3.0.1](https://spdx.github.io/spdx-spec/v3.0.1/) JSON-LD document with the AI, Dataset, Software, and Security profiles. This is the lossiest format AIROM emits, because SPDX has no home for `file:line` evidence; see [mapping.md](./mapping.md) §1). No `=path` writes to stdout. Repeat for multi-output in one scan. |
 | `--format <fmt>` | string | — | Single-format alias for `-o` (familiar scanner spelling). |
-| `--select <expr>` | string | per-source defaults | Detector selection expression (Syft-style tags + include/exclude): `"rules,+modelfile/gguf,-dataset/file"`. Which expression enabled which detector is recorded in the output `Stats`. |
+| `--select <expr>` | string | per-source defaults | Detector selection expression (tags plus include/exclude): `"rules,+modelfile/gguf,-dataset/file"`. Which expression enabled which detector is recorded in the output `Stats`. |
 | `--rules <file>` | string, repeatable | — | Overlay rule pack(s), merged by rule ID (add/override/disable. See [rule-schema.md](./rule-schema.md#the-rule-layers-and-merge-semantics)). Changes the effective ruleset hash and therefore the cache namespace. |
 | `--compliance <framework>` | string, repeatable | — | Map the AIBOM onto a governance framework (e.g. `nist-ai-rmf`) and attach the result as CycloneDX `definitions`/`declarations`. A mapping, never a certification. See [compliance.md](./compliance.md). |
 | `--no-eol` | bool | `false` | Disable the **hosted-model end-of-life overlay**, which is **on by default** (its catalog comes from a fetched bundle when one carries it, else the embedded copy. See [eol.md](./eol.md)). It matches the AI models AIROM inventoried against a curated catalog of provider retirement announcements and attaches a dated, sourced lifecycle (`supported` / `deprecated` / `retired`) with the migration target the provider names. Unlike `--cve` the catalog is local (bundle or embedded), never a live query, so it needs no network and keeps working under `--offline`. A model the catalog does not cover carries no claim at all, "unknown" is the absence of a statement, never a quiet "supported". |
@@ -165,7 +165,7 @@ like `[0-9]` instead.
 
 ### `airom scan <target>`
 
-Scheme auto-detection (Syft-style), tried in order:
+Scheme auto-detection, tried in order:
 
 1. Existing local path → filesystem scan (`fs`).
 2. Git URL (`https://…​.git`, `git@…`, `ssh://…`) → shallow clone → scan (`repo`).

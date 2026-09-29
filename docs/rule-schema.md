@@ -103,7 +103,7 @@ executes only if at least one keyword hits. Consequences:
 
 - **A rule with no keywords is rejected by `airom rules lint`**, nobody can ship an
   un-prefiltered regex. This is what keeps hundreds of rules × 100k files cheap (invariant
-  P3; the shape gitleaks and semgrep both proved).
+  P3: a rule cannot reach its regex without first matching a mandatory literal).
 - Include every casing variant you need (`"ChatOpenAI"`, `"chat_openai"`).
 - Prefer selective literals (≥ 4 characters, provider-distinctive). Lint warns on keywords
   so short or common that they defeat the prefilter.
@@ -338,7 +338,7 @@ the effective ruleset with each rule's originating layer.
 
 ## Compilation and runtime behavior
 
-`rules.Compile()` runs **once at process startup** (gitleaks lineage):
+`rules.Compile()` runs **once at process startup**:
 
 1. Parse every pack in every layer; apply merge semantics.
 2. Validate the entire lint contract above; any violation aborts startup with the offending
