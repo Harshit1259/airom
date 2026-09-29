@@ -146,7 +146,17 @@ func extractTarGz(src, dst string) error {
 			return err
 		}
 		clean := filepath.Clean(filepath.FromSlash(hdr.Name))
-		if clean == "." || strings.HasPrefix(clean, ".."+string(os.PathSeparator)) || filepath.IsAbs(clean) {
+		// filepath.IsLocal rather than a hand-rolled prefix test: the previous
+		// check looked for a ".." followed by a separator, so an entry named
+		// exactly ".." slipped through and joined to the PARENT of dst. It was
+		// not exploitable — as a dir that MkdirAll is a no-op, as a file the
+		// Create hits EISDIR — but the guard is supposed to mean "nothing
+		// resolves outside the root", and that one resolved to its parent.
+		// IsLocal covers ".." and every other escape, absolute paths, and
+		// Windows reserved names; "." is still rejected separately because
+		// IsLocal considers it local while extracting to it means writing dst
+		// itself.
+		if clean == "." || !filepath.IsLocal(clean) {
 			return fmt.Errorf("refusing archive entry %q: escapes the extraction root", hdr.Name)
 		}
 		target := filepath.Join(dst, clean)
