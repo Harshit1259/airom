@@ -177,8 +177,12 @@ func parseTerm(raw string) (term, error) {
 	}
 	// CVE selectors ("cve", "cve:<severity>").
 	if m := cveRe.FindStringSubmatch(s); m != nil {
-		if sev := m[1]; sev != "" && cveSeverityRank(sev) == 0 {
-			return term{}, fmt.Errorf("unknown cve severity %q; want critical, high, medium, or low", sev)
+		// "kev" is not a severity but a different axis: CVSS rates how bad
+		// exploitation would be, KEV records that it has happened. It is
+		// spelled under cve: because it only ever qualifies a CVE the CVE
+		// overlay already found.
+		if sev := m[1]; sev != "" && sev != kevSel && cveSeverityRank(sev) == 0 {
+			return term{}, fmt.Errorf("unknown cve selector %q; want critical, high, medium, low, or kev", sev)
 		}
 		return term{Ident: s}, nil
 	}
@@ -434,6 +438,17 @@ func eolTermMatches(ident string, c *airom.Component) bool {
 func cveTermMatches(ident string, c *airom.Component) bool {
 	threshold := 0 // "cve" — any vulnerability (rank 0 admits every severity)
 	if sev, ok := strings.CutPrefix(ident, "cve:"); ok {
+		// "cve:kev" fires on any advisory CISA lists as exploited, at ANY
+		// severity: that is the point of the selector. A medium under active
+		// exploitation is the case a severity threshold would miss.
+		if sev == kevSel {
+			for _, v := range c.Vulnerabilities {
+				if v.KEV != nil {
+					return true
+				}
+			}
+			return false
+		}
 		threshold = cveSeverityRank(sev)
 	}
 	for _, v := range c.Vulnerabilities {
@@ -443,6 +458,10 @@ func cveTermMatches(ident string, c *airom.Component) bool {
 	}
 	return false
 }
+
+// kevSel is the "cve:kev" selector: any advisory in CISA's Known Exploited
+// Vulnerabilities catalog, regardless of its CVSS severity.
+const kevSel = "kev"
 
 // cveSeverityRank orders CVE severities for threshold gating; 0 = unknown/none.
 func cveSeverityRank(sev string) int {
@@ -460,9 +479,27 @@ func cveSeverityRank(sev string) int {
 	}
 }
 
+// ReferencesKEV reports whether the policy gates on exploitation status
+// ("cve:kev"), which is what decides whether a KEV catalog that failed to load
+// is fatal or merely a warning.
+func (p *Policy) ReferencesKEV() bool {
+	if p == nil {
+		return false
+	}
+	for _, conj := range p.anyOf {
+		for _, t := range conj.terms {
+			if t.Ident == "cve:"+kevSel {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // ReferencesCVE reports whether the policy gates on a CVE selector — so config
 // validation can reject gating on CVEs that were never fetched (--fail-on cve
-// without --cve).
+// without --cve). "cve:kev" counts: it gates on a CVE too, and gating on
+// exploitation when nothing was fetched is the same mistake.
 func (p *Policy) ReferencesCVE() bool {
 	if p == nil {
 		return false

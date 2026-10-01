@@ -20,6 +20,33 @@ type Vulnerability struct {
 	Fixed    string       `json:"fixedVersion,omitempty"` // the first fixed version, when the advisory names one
 	Source   string       `json:"source"`                 // "osv.dev"
 	URL      string       `json:"url,omitempty"`          // advisory URL
+	// KEV is set when this CVE appears in CISA's Known Exploited
+	// Vulnerabilities catalog. Nil means the catalog had no entry for it — or
+	// that no catalog was consulted at all; EnrichmentStats.CVE.KEVCatalog is
+	// what tells those two apart, because "not listed" and "not checked" are
+	// different claims and only one of them is reassuring.
+	KEV *KEVRecord `json:"kev,omitempty"`
+}
+
+// KEVRecord is a CISA Known Exploited Vulnerabilities entry: the authoritative
+// statement that a CVE has been exploited in the wild, as opposed to a CVSS
+// score, which rates how bad exploitation WOULD be. The two are orthogonal — a
+// medium-severity CVE under active exploitation outranks a critical nobody has
+// ever used — so KEV never rewrites Severity or Score. It is reported alongside
+// them and left for the reader, or for `--fail-on cve:kev`, to weigh.
+type KEVRecord struct {
+	// Added is the date CISA added the CVE to the catalog (YYYY-MM-DD).
+	Added Date `json:"added"`
+	// Due is the BOD 22-01 remediation deadline CISA set for federal civilian
+	// agencies. It binds nobody else, and is carried because it is the closest
+	// thing to an authoritative urgency signal attached to the entry.
+	Due Date `json:"due,omitzero"`
+	// Ransomware records CISA's "knownRansomwareCampaignUse: Known". The
+	// catalog's other value is "Unknown", which is an absence of evidence
+	// rather than evidence of absence, so only the positive is represented.
+	Ransomware bool `json:"knownRansomwareUse,omitempty"`
+	// Source identifies the catalog this record came from ("cisa-kev").
+	Source string `json:"source"`
 }
 
 // VulnSeverity is the CVSS-derived severity bucket. Includes "critical" (which

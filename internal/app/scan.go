@@ -14,6 +14,7 @@ import (
 	"github.com/airomhq/airom/internal/dispatch"
 	"github.com/airomhq/airom/internal/engine"
 	"github.com/airomhq/airom/internal/eol"
+	"github.com/airomhq/airom/internal/kev"
 	"github.com/airomhq/airom/internal/osv"
 	"github.com/airomhq/airom/internal/ruleengine"
 	"github.com/airomhq/airom/internal/source"
@@ -30,6 +31,11 @@ var Tool = airom.ToolInfo{Name: "airom", Version: "dev"}
 // whether an unevaluated gate fails closed — is otherwise unreachable from a
 // test, which is exactly the kind of code that rots.
 var loadEmbeddedEOLCatalog = eol.Load
+
+// loadEmbeddedKEVCatalog is eol's counterpart for the known-exploited catalog,
+// indirected for the same reason: tests substitute a small catalog instead of
+// compiling the 1700-entry real one into every fixture's expectations.
+var loadEmbeddedKEVCatalog = kev.Load
 
 // buildCatalog composes the detector catalog: generated built-ins plus the
 // rule-engine detector when the effective ruleset is non-empty (§6.2 —
@@ -199,6 +205,41 @@ func runScanPipeline(ctx context.Context, cfg *Config, src source.Source) (*airo
 				cfg.Policy, failed,
 			)
 		}
+
+		// The known-exploited overlay runs on what the CVE overlay just found,
+		// so it is scoped here rather than beside the lifecycle overlay: with
+		// no CVEs there is nothing to mark, and running it anyway would record
+		// a catalog that answered no question. It needs no network of its own —
+		// the catalog is data — so it costs nothing beyond the round-trips the
+		// CVE overlay already made.
+		cat, catSource, catWarn, err := loadKEVCatalogFor(cfg)
+		if catWarn != "" {
+			inv.Stats.Warnings = append(inv.Stats.Warnings, catWarn)
+		}
+		switch {
+		case err != nil && cfg.Policy.ReferencesKEV():
+			// Fail closed, as the CVE and EOL gates do. A `cve:kev` gate with
+			// no catalog can only ever pass, and a green build is the one
+			// outcome that must never be a lie.
+			return nil, fmt.Errorf(
+				"kev gate (--fail-on %s) cannot be evaluated: the known-exploited catalog failed to load: %w",
+				cfg.Policy, err,
+			)
+		case err != nil:
+			inv.Stats.Warnings = append(inv.Stats.Warnings,
+				fmt.Sprintf("kev: known-exploited catalog unavailable, no exploitation status reported (%v)", err))
+		default:
+			enrich.CVE.KEVListed = kev.Enrich(inv, cat)
+			enrich.CVE.KEVCatalog = catSource
+			// Staleness is a finding here, not a nuisance: CISA adds entries
+			// several times a week, and this overlay's failure direction is
+			// under-reporting exploitation that is already public.
+			if stale, age := cat.Stale(airom.DateOf(now)); stale {
+				inv.Stats.Warnings = append(inv.Stats.Warnings, fmt.Sprintf(
+					"kev: the known-exploited catalog was generated %d days ago; CVEs CISA has listed since are not marked (refresh with 'airom rules update')", age))
+			}
+		}
+		sort.Strings(inv.Stats.Warnings)
 	}
 
 	// The EOL overlay attaches provider retirement facts to hosted models. It

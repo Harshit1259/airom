@@ -798,11 +798,27 @@ func buildVulnerabilities(inv *airom.Inventory) []cyclonedx.Vulnerability {
 				}
 				v.References = &refs
 			}
+			// CycloneDX has no slot for exploitation status — `analysis` is
+			// about the publisher's response, not CISA's observation — so the
+			// KEV record travels as properties beside the fixed version. It is
+			// deliberately NOT folded into the rating: a KEV entry is not a
+			// score, and raising the severity to signal it would publish a
+			// number nobody assigned.
+			var props propList
 			if cve.Fixed != "" {
-				var props propList
 				props.add("airom:cve.fixedVersion", cve.Fixed)
-				v.Properties = props.sorted()
 			}
+			if k := cve.KEV; k != nil {
+				props.add("airom:cve.kev.source", k.Source)
+				props.add("airom:cve.kev.added", k.Added.String())
+				if !k.Due.IsZero() {
+					props.add("airom:cve.kev.due", k.Due.String())
+				}
+				if k.Ransomware {
+					props.add("airom:cve.kev.knownRansomwareUse", "true")
+				}
+			}
+			v.Properties = props.sorted()
 			vulns = append(vulns, v)
 		}
 	}

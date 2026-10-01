@@ -139,6 +139,15 @@ type CVEEnrichment struct {
 	// failure). Zero with Enabled=true means every eligible component was
 	// checked; anything else means "absence of CVEs" is not a claim.
 	Unchecked int `json:"unchecked,omitempty"`
+	// KEVCatalog identifies the CISA Known Exploited Vulnerabilities catalog
+	// consulted ("builtin" or the bundle version), empty when none was. It is
+	// the field that makes a missing Vulnerability.KEV readable: with a catalog
+	// named, nil means "CISA does not list this CVE"; with none, nil means
+	// nobody looked.
+	KEVCatalog string `json:"kevCatalog,omitempty"`
+	// KEVListed counts the CVEs matched against the catalog, so a reader can
+	// tell "the catalog ran and found nothing here" from "the catalog ran".
+	KEVListed int `json:"kevListed,omitempty"`
 }
 
 // EOLEnrichment records the model-lifecycle overlay's coverage. The catalog

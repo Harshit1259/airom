@@ -739,10 +739,21 @@ class CVEEnrichment:
 
     enabled: bool = False
     unchecked: int = 0
+    #: Which CISA Known Exploited Vulnerabilities catalog answered ("builtin",
+    #: or a bundle version). Empty means none did — which is what tells a
+    #: missing exploitation status apart from "CISA does not list this CVE".
+    kev_catalog: str = ""
+    #: How many advisories that catalog marked as known-exploited.
+    kev_listed: int = 0
 
     @classmethod
     def from_json(cls, o: dict[str, Any]) -> CVEEnrichment:
-        return cls(enabled=bool(o.get("enabled", False)), unchecked=o.get("unchecked", 0))
+        return cls(
+            enabled=bool(o.get("enabled", False)),
+            unchecked=o.get("unchecked", 0),
+            kev_catalog=o.get("kevCatalog", "") or "",
+            kev_listed=o.get("kevListed", 0),
+        )
 
 
 @dataclass(frozen=True)

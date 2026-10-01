@@ -174,6 +174,7 @@ func ParsePack(stem string, data []byte) (Pack, error) {
 // this set would break the ruleset rather than be ignored.
 var NonRulePackDirs = map[string]bool{
 	"eol": true, // model lifecycle catalogs (internal/eol)
+	"kev": true, // CISA known-exploited-vulnerability catalog (internal/kev)
 }
 
 // Load assembles the effective ruleset from the embedded layer (nil-able fs.FS

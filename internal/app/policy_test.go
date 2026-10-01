@@ -288,3 +288,81 @@ func TestParsePolicyAcceptsEveryMatchableIdentifier(t *testing.T) {
 		}
 	}
 }
+
+// TestCVEKEVSelector: "cve:kev" is a different axis from the severity
+// thresholds — it fires on exploitation at ANY severity, which is precisely the
+// case a severity gate misses. A medium under active exploitation is the one
+// somebody has to fix today.
+func TestCVEKEVSelector(t *testing.T) {
+	kevMedium := airom.Component{
+		ID: "airom:1", Kind: airom.KindFramework, Name: "a",
+		Vulnerabilities: []airom.Vulnerability{{
+			ID: "CVE-2026-1", Severity: airom.VulnMedium,
+			KEV: &airom.KEVRecord{Added: airom.Date{Year: 2026, Month: 8, Day: 19}, Source: "cisa-kev"},
+		}},
+	}
+	criticalNotKEV := airom.Component{
+		ID: "airom:2", Kind: airom.KindFramework, Name: "b",
+		Vulnerabilities: []airom.Vulnerability{{ID: "CVE-2026-2", Severity: airom.VulnCritical}},
+	}
+
+	for _, tc := range []struct {
+		expr string
+		c    airom.Component
+		want bool
+	}{
+		{"cve:kev", kevMedium, true},
+		{"cve:kev", criticalNotKEV, false},
+		// The severity gate would miss the exploited medium entirely.
+		{"cve:high", kevMedium, false},
+		{"cve:critical", criticalNotKEV, true},
+		{"cve", kevMedium, true},
+	} {
+		p, err := ParsePolicy(tc.expr)
+		if err != nil {
+			t.Fatalf("ParsePolicy(%q): %v", tc.expr, err)
+		}
+		inv := &airom.Inventory{Components: []airom.Component{tc.c}}
+		if got := p.Matches(inv, false); got != tc.want {
+			t.Errorf("%q against %s = %v, want %v", tc.expr, tc.c.Name, got, tc.want)
+		}
+	}
+}
+
+// TestCVEKEVSelectorValidation: a near-miss must name the valid set rather than
+// fail as an unknown identifier somewhere downstream.
+func TestCVEKEVSelectorValidation(t *testing.T) {
+	if _, err := ParsePolicy("cve:exploited"); err == nil {
+		t.Fatal("cve:exploited was accepted")
+	} else if !strings.Contains(err.Error(), "kev") {
+		t.Errorf("error does not mention the valid selector: %v", err)
+	}
+}
+
+// TestReferencesKEV decides whether a catalog that failed to load is fatal, so
+// it must be true only for the selector that actually needs the catalog.
+func TestReferencesKEV(t *testing.T) {
+	for expr, want := range map[string]bool{
+		"cve:kev":            true,
+		"hosted-llm|cve:kev": true,
+		"cve":                false,
+		"cve:critical":       false,
+		"risk:high":          false,
+	} {
+		p, err := ParsePolicy(expr)
+		if err != nil {
+			t.Fatalf("ParsePolicy(%q): %v", expr, err)
+		}
+		if got := p.ReferencesKEV(); got != want {
+			t.Errorf("ReferencesKEV(%q) = %v, want %v", expr, got, want)
+		}
+		// Every cve: selector, kev included, still needs the overlay to have run.
+		if strings.HasPrefix(expr, "cve") && !p.ReferencesCVE() {
+			t.Errorf("ReferencesCVE(%q) = false; a kev gate still needs fetched CVEs", expr)
+		}
+	}
+	var nilPolicy *Policy
+	if nilPolicy.ReferencesKEV() {
+		t.Error("nil policy reported a KEV reference")
+	}
+}

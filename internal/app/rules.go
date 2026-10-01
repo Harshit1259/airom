@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/airomhq/airom/internal/eol"
+	"github.com/airomhq/airom/internal/kev"
 	"github.com/airomhq/airom/internal/ruleengine"
 	"github.com/airomhq/airom/internal/ruleengine/ruletest"
 	"github.com/airomhq/airom/internal/rulesync"
@@ -166,6 +167,43 @@ func loadEOLCatalogFor(cfg *Config) (cat *eol.Catalog, source, warn string, err 
 		return eol.Overlay(embedded, fetched), eol.SourceBuiltin + "+" + version, "", nil
 	}
 	return embedded, eol.SourceBuiltin, "", nil
+}
+
+// loadKEVCatalogFor resolves the known-exploited catalog the same way the
+// lifecycle catalog is resolved: the embedded copy is the floor, a cached
+// signed bundle replaces it when it carries one. Unlike the lifecycle catalogs
+// there is no per-provider merge — the catalog is one list from one publisher,
+// so a bundle copy is newer or it is not there, and taking the newer whole is
+// the honest read.
+func loadKEVCatalogFor(cfg *Config) (cat *kev.Catalog, source, warn string, err error) {
+	embedded, err := loadEmbeddedKEVCatalog()
+	if err != nil {
+		return nil, "", "", err
+	}
+	if cfg.NoCachedRules {
+		return embedded, kev.SourceBuiltin, "", nil
+	}
+	dir := cacheDirFor(cfg)
+	bundle, version, ok := rulesync.Active(dir)
+	if !ok {
+		return embedded, kev.SourceBuiltin, "", nil
+	}
+	fetched, present, loadErr := kev.LoadBundle(bundle)
+	switch {
+	case loadErr != nil:
+		// Same discipline as the lifecycle catalog: a bad publish degrades to
+		// the built-in copy, and says so IN THE DOCUMENT, because stderr is
+		// routinely discarded in CI and the BOM is the record that survives.
+		slog.Warn("cached bundle's KEV catalog failed to load; using the built-in one",
+			"version", version, "error", loadErr)
+		return embedded, kev.SourceBuiltin, fmt.Sprintf(
+			"kev: the known-exploited catalog in rule bundle %s could not be loaded and was ignored; using the built-in catalog (%v)",
+			version, loadErr,
+		), nil
+	case present:
+		return fetched, version, "", nil
+	}
+	return embedded, kev.SourceBuiltin, "", nil
 }
 
 // loadRuleset assembles the effective ruleset (base layer + --rules overlays)

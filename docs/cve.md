@@ -220,6 +220,65 @@ invented).
 fires on high **and** critical CVEs; `cve:medium` fires on medium and above.
 Use bare `cve` to fail on any CVE at all.
 
+## Known exploited vulnerabilities (CISA KEV)
+
+CVSS answers *how bad would exploitation be*. It does not answer *is this being
+exploited*, and those are different questions with different answers: a
+medium-severity CVE under active exploitation is a more urgent problem than a
+critical nobody has ever used.
+
+Every CVE the overlay finds is matched against [CISA's Known Exploited
+Vulnerabilities catalog][kev]. A match attaches the dates CISA published:
+
+```console
+$ airom scan . -o table
+```
+
+```
+│ LIBRARY │ VULNERABILITY  │ SEVERITY │ EXPLOITED │ STATUS │ INSTALLED │ FIXED  │
+│ mlflow  │ CVE-2026-64849 │ CRITICAL │ yes       │ fixed  │ 2.0.0     │ 3.15.0 │
+```
+
+The `EXPLOITED` column appears only when something is, and exploited advisories
+sort above everything else regardless of score — the row you have to act on
+today is the one CISA has seen used, not the one with the highest number.
+
+Gate on it directly:
+
+```bash
+airom scan . --exit-code 1 --fail-on "cve:kev"
+```
+
+`cve:kev` fires at **any** severity. That is the point: a severity threshold is
+exactly what would miss an exploited medium.
+
+### What the catalog does and does not claim
+
+- **A CVE absent from the catalog gets no record.** That is "CISA does not list
+  it", not "not exploited", and the two are very different. Nothing is written
+  to say a CVE is safe.
+- **KEV never rewrites severity or score.** Exploitation and impact are separate
+  axes; folding one into the other would publish a number nobody assigned. The
+  record is reported beside the CVSS rating and left for you to weigh.
+- **A stale catalog under-reports.** CISA adds entries several times a week, so a
+  catalog nobody has refreshed is silently missing exploitation that is already
+  public. A scan warns once the catalog is more than 30 days old, and
+  `airom rules update` refreshes it through the signed bundle without a binary
+  upgrade.
+- **Which catalog answered is recorded**, in `stats.enrichment.cve.kevCatalog`.
+  That is what makes an absent record readable: with a catalog named, nothing
+  attached means CISA does not list the CVE; with none, it means nobody looked.
+
+### It needs the CVE overlay, so it needs the network
+
+The catalog itself is local — embedded in the binary, refreshable through the
+signed bundle — so this adds **no network requests of its own**. But it has
+nothing to mark unless the CVE overlay ran first, and that overlay needs OSV.
+Under `--offline` there are no CVEs and therefore no exploitation status;
+`--fail-on cve:kev` is refused there for the same reason any CVE gate is.
+
+[kev]: https://www.cisa.gov/known-exploited-vulnerabilities-catalog
+
 ## Honesty and degradation
 
 - **A network failure is never fatal, except when it would turn a CVE gate into
