@@ -9,7 +9,12 @@ import (
 	"github.com/airomhq/airom/internal/classify"
 )
 
-// allLangs is every language with a real lexer.
+// allLangs is every language with a real lexer. It must stay in sync with the
+// configs table in langs.go: this list is what checkTiling and FuzzClassify
+// iterate, so a lexer missing from here is a lexer nothing exercises. SQL was
+// missing while its config shipped and ran — .sql files are classified and
+// scanned, so that config was taking untrusted bytes with no fuzzing behind it.
+// TestAllLangsCoversEveryConfig now fails rather than letting the next one slip.
 var allLangs = []classify.Language{
 	classify.LangPython,
 	classify.LangJavaScript,
@@ -19,6 +24,23 @@ var allLangs = []classify.Language{
 	classify.LangRust,
 	classify.LangCSharp,
 	classify.LangKotlin,
+	classify.LangSQL,
+}
+
+// TestAllLangsCoversEveryConfig: the two lists are maintained by hand in
+// different files, and the failure mode is silent — a language gains a lexer,
+// nobody adds it here, and it is never fuzzed again. Assert they agree.
+func TestAllLangsCoversEveryConfig(t *testing.T) {
+	for lang := range configs {
+		if !slices.Contains(allLangs, lang) {
+			t.Errorf("langs.go has a lexer for %q that allLangs omits: it is never fuzzed or tiling-checked", lang)
+		}
+	}
+	for _, lang := range allLangs {
+		if _, ok := configs[lang]; !ok {
+			t.Errorf("allLangs lists %q, which has no lexer config in langs.go", lang)
+		}
+	}
 }
 
 // checkTiling asserts regions tile [0, len(src)) exactly: sorted, non-empty,
