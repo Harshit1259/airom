@@ -155,10 +155,6 @@
       },
       "props": [
         {
-          "name": "airom:model.provider",
-          "value": "openai"
-        },
-        {
           "name": "airom:model.id",
           "value": "text-embedding-3-large"
         }
@@ -451,10 +447,6 @@
         ]
       },
       "props": [
-        {
-          "name": "airom:model.provider",
-          "value": "openai"
-        },
         {
           "name": "airom:model.id",
           "value": "gpt-4.1"

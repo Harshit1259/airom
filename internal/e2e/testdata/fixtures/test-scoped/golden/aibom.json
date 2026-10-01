@@ -70,10 +70,6 @@
       "testOnly": true,
       "props": [
         {
-          "name": "airom:model.provider",
-          "value": "anthropic"
-        },
-        {
           "name": "airom:model.id",
           "value": "claude-1.0"
         }
@@ -212,10 +208,6 @@
       },
       "props": [
         {
-          "name": "airom:model.provider",
-          "value": "openai"
-        },
-        {
           "name": "airom:model.id",
           "value": "gpt-4o-mini"
         }
@@ -248,10 +240,6 @@
         ]
       },
       "props": [
-        {
-          "name": "airom:model.provider",
-          "value": "openai"
-        },
         {
           "name": "airom:model.id",
           "value": "gpt-4o"
@@ -387,10 +375,6 @@
       },
       "testOnly": true,
       "props": [
-        {
-          "name": "airom:model.provider",
-          "value": "openai"
-        },
         {
           "name": "airom:model.id",
           "value": "gpt-4-32k"

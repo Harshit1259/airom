@@ -218,10 +218,6 @@
         {
           "name": "airom:model.provider",
           "value": "openai"
-        },
-        {
-          "name": "airom:model.provider",
-          "value": "openai"
         }
       ],
       "evidence": {
@@ -477,10 +473,6 @@
         {
           "name": "airom:model.id",
           "value": "gpt-4.1"
-        },
-        {
-          "name": "airom:model.provider",
-          "value": "openai"
         },
         {
           "name": "airom:model.provider",

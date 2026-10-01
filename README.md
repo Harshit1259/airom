@@ -93,8 +93,7 @@ absent, because an AIBOM is not an SBOM.
 $ airom scan . -o cyclonedx=bom.json
 ```
 
-One component from `bom.json`, unedited except that a property the writer
-emits twice is shown once:
+One component from `bom.json`, verbatim:
 
 ```json
 {

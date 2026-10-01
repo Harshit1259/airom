@@ -79,10 +79,6 @@
       },
       "props": [
         {
-          "name": "airom:model.provider",
-          "value": "openai"
-        },
-        {
           "name": "airom:model.id",
           "value": "gpt-4.1"
         },

@@ -46,8 +46,6 @@ components:
           value: "1"
     name: claude-1.0
     props:
-      - name: airom:model.provider
-        value: anthropic
       - name: airom:model.id
         value: claude-1.0
     provider: anthropic
@@ -138,8 +136,6 @@ components:
           value: "1"
     name: gpt-4o-mini
     props:
-      - name: airom:model.provider
-        value: openai
       - name: airom:model.id
         value: gpt-4o-mini
     provider: openai
@@ -162,8 +158,6 @@ components:
     kind: hosted-llm
     name: gpt-4o
     props:
-      - name: airom:model.provider
-        value: openai
       - name: airom:model.id
         value: gpt-4o
     provider: openai
@@ -268,8 +262,6 @@ components:
     kind: hosted-llm
     name: gpt-4-32k
     props:
-      - name: airom:model.provider
-        value: openai
       - name: airom:model.id
         value: gpt-4-32k
     provider: openai

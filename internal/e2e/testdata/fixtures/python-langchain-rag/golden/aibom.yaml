@@ -91,8 +91,6 @@ components:
     kind: embedding-model
     name: text-embedding-3-large
     props:
-      - name: airom:model.provider
-        value: openai
       - name: airom:model.id
         value: text-embedding-3-large
     provider: openai
@@ -294,8 +292,6 @@ components:
           value: "0.2"
     name: gpt-4.1
     props:
-      - name: airom:model.provider
-        value: openai
       - name: airom:model.id
         value: gpt-4.1
     provider: openai

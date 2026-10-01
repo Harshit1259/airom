@@ -101,10 +101,6 @@
           "value": "anthropic"
         },
         {
-          "name": "airom:model.provider",
-          "value": "anthropic"
-        },
-        {
           "name": "airom:param.max_tokens",
           "value": "512 @ src/agent.ts:6"
         }

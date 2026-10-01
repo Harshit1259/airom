@@ -115,7 +115,7 @@
       ]
     },
     {
-      "comment": "airom:releaseTime NOASSERTION; airom:model.provider openai; airom:model.id text-embedding-3-large; airom:confidence 0.85; airom:evidence 1 occurrence(s); airom:kind embedding-model",
+      "comment": "airom:releaseTime NOASSERTION; airom:model.id text-embedding-3-large; airom:confidence 0.85; airom:evidence 1 occurrence(s); airom:kind embedding-model",
       "creationInfo": "_:creationInfo",
       "name": "text-embedding-3-large",
       "software_downloadLocation": "NOASSERTION",
@@ -203,7 +203,7 @@
       "type": "software_Package"
     },
     {
-      "comment": "airom:releaseTime NOASSERTION; airom:param.max_tokens 800; airom:param.temperature 0.2; airom:model.provider openai; airom:model.id gpt-4.1; airom:confidence 0.85; airom:evidence 1 occurrence(s); airom:kind hosted-llm",
+      "comment": "airom:releaseTime NOASSERTION; airom:param.max_tokens 800; airom:param.temperature 0.2; airom:model.id gpt-4.1; airom:confidence 0.85; airom:evidence 1 occurrence(s); airom:kind hosted-llm",
       "creationInfo": "_:creationInfo",
       "name": "gpt-4.1",
       "software_downloadLocation": "NOASSERTION",

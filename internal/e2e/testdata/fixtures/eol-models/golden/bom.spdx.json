@@ -39,7 +39,7 @@
       "type": "Organization"
     },
     {
-      "comment": "airom:releaseTime NOASSERTION; airom:param.max_tokens 64; airom:model.provider anthropic; airom:model.id claude-sonnet-4-6; airom:confidence 0.85; airom:evidence 1 occurrence(s); airom:kind hosted-llm",
+      "comment": "airom:releaseTime NOASSERTION; airom:param.max_tokens 64; airom:model.id claude-sonnet-4-6; airom:confidence 0.85; airom:evidence 1 occurrence(s); airom:kind hosted-llm",
       "creationInfo": "_:creationInfo",
       "name": "claude-sonnet-4-6",
       "software_downloadLocation": "NOASSERTION",
@@ -50,7 +50,7 @@
       "type": "ai_AIPackage"
     },
     {
-      "comment": "airom:releaseTime NOASSERTION; airom:eol deprecated; shutdown 2026-10-23; replacement gpt-5.6-sol; https://developers.openai.com/api/docs/deprecations; airom:model.provider openai; airom:model.id gpt-4-turbo; airom:confidence 0.85; airom:evidence 1 occurrence(s); airom:kind hosted-llm",
+      "comment": "airom:releaseTime NOASSERTION; airom:eol deprecated; shutdown 2026-10-23; replacement gpt-5.6-sol; https://developers.openai.com/api/docs/deprecations; airom:model.id gpt-4-turbo; airom:confidence 0.85; airom:evidence 1 occurrence(s); airom:kind hosted-llm",
       "creationInfo": "_:creationInfo",
       "name": "gpt-4-turbo",
       "software_downloadLocation": "NOASSERTION",
@@ -79,7 +79,7 @@
       "type": "software_Package"
     },
     {
-      "comment": "airom:releaseTime NOASSERTION; airom:eol retired; shutdown 2026-08-05; replacement claude-opus-4-8; https://platform.claude.com/docs/en/docs/about-claude/model-deprecations; airom:param.max_tokens 64; airom:model.provider anthropic; airom:model.id claude-opus-4-1-20250805; airom:confidence 0.85; airom:evidence 1 occurrence(s); airom:kind hosted-llm",
+      "comment": "airom:releaseTime NOASSERTION; airom:eol retired; shutdown 2026-08-05; replacement claude-opus-4-8; https://platform.claude.com/docs/en/docs/about-claude/model-deprecations; airom:param.max_tokens 64; airom:model.id claude-opus-4-1-20250805; airom:confidence 0.85; airom:evidence 1 occurrence(s); airom:kind hosted-llm",
       "creationInfo": "_:creationInfo",
       "name": "claude-opus-4-1-20250805",
       "software_downloadLocation": "NOASSERTION",
@@ -91,7 +91,7 @@
       "validUntilTime": "2026-08-05T00:00:00Z"
     },
     {
-      "comment": "airom:releaseTime NOASSERTION; airom:param.max_tokens 64; airom:model.provider openai; airom:model.id gpt-4o; airom:confidence 0.85; airom:evidence 1 occurrence(s); airom:kind hosted-llm",
+      "comment": "airom:releaseTime NOASSERTION; airom:param.max_tokens 64; airom:model.id gpt-4o; airom:confidence 0.85; airom:evidence 1 occurrence(s); airom:kind hosted-llm",
       "creationInfo": "_:creationInfo",
       "name": "gpt-4o",
       "software_downloadLocation": "NOASSERTION",
@@ -127,7 +127,7 @@
       "type": "software_Package"
     },
     {
-      "comment": "airom:releaseTime NOASSERTION; airom:eol retired; shutdown 2025-06-06; replacement gpt-4o; https://developers.openai.com/api/docs/deprecations; airom:model.provider openai; airom:model.id gpt-4-32k; airom:confidence 0.85; airom:evidence 1 occurrence(s); airom:kind hosted-llm",
+      "comment": "airom:releaseTime NOASSERTION; airom:eol retired; shutdown 2025-06-06; replacement gpt-4o; https://developers.openai.com/api/docs/deprecations; airom:model.id gpt-4-32k; airom:confidence 0.85; airom:evidence 1 occurrence(s); airom:kind hosted-llm",
       "creationInfo": "_:creationInfo",
       "name": "gpt-4-32k",
       "software_downloadLocation": "NOASSERTION",

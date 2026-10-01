@@ -45,7 +45,7 @@
       "type": "Organization"
     },
     {
-      "comment": "airom:releaseTime NOASSERTION; airom:param.max_tokens 512; airom:model.provider anthropic; airom:model.id claude-sonnet-4-5; airom:confidence 0.85; airom:evidence 1 occurrence(s); airom:kind hosted-llm",
+      "comment": "airom:releaseTime NOASSERTION; airom:param.max_tokens 512; airom:model.id claude-sonnet-4-5; airom:confidence 0.85; airom:evidence 1 occurrence(s); airom:kind hosted-llm",
       "creationInfo": "_:creationInfo",
       "name": "claude-sonnet-4-5",
       "software_downloadLocation": "NOASSERTION",

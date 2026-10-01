@@ -157,10 +157,6 @@
         {
           "name": "airom:model.provider",
           "value": "openai"
-        },
-        {
-          "name": "airom:model.provider",
-          "value": "openai"
         }
       ],
       "evidence": {

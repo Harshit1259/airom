@@ -879,10 +879,12 @@ func (d *draft) finish() airom.Component {
 			}
 		}
 	case "hosted-model":
-		// NO purl. Identity via bom-ref + airom:model.* properties.
-		if d.provider != "" {
-			c.Props = append(c.Props, airom.KV{Name: "airom:model.provider", Value: d.provider})
-		}
+		// NO purl. Identity via bom-ref + airom:model.provider + airom:model.id
+		// (mapping.md §9.4). Only the id is recorded here: provider already has
+		// a typed home in c.Provider, and mapping.md §5 makes that the single
+		// source every writer projects `airom:model.provider` from. Recording
+		// it a second time put the same name and value into the CycloneDX
+		// properties array twice, which is spec-legal and says nothing.
 		c.Props = append(c.Props, airom.KV{Name: "airom:model.id", Value: d.name})
 	}
 

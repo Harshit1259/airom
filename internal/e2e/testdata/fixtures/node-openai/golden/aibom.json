@@ -69,10 +69,6 @@
       },
       "props": [
         {
-          "name": "airom:model.provider",
-          "value": "anthropic"
-        },
-        {
           "name": "airom:model.id",
           "value": "claude-sonnet-4-5"
         }

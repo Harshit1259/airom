@@ -56,8 +56,6 @@ components:
     kind: hosted-llm
     name: gpt-4o-mini
     props:
-      - name: airom:model.provider
-        value: openai
       - name: airom:model.id
         value: gpt-4o-mini
     provider: openai

@@ -69,10 +69,6 @@
       },
       "props": [
         {
-          "name": "airom:model.provider",
-          "value": "anthropic"
-        },
-        {
           "name": "airom:model.id",
           "value": "claude-sonnet-4-6"
         }
@@ -111,10 +107,6 @@
         ]
       },
       "props": [
-        {
-          "name": "airom:model.provider",
-          "value": "openai"
-        },
         {
           "name": "airom:model.id",
           "value": "gpt-4-turbo"
@@ -254,10 +246,6 @@
       },
       "props": [
         {
-          "name": "airom:model.provider",
-          "value": "anthropic"
-        },
-        {
           "name": "airom:model.id",
           "value": "claude-opus-4-1-20250805"
         }
@@ -326,10 +314,6 @@
         ]
       },
       "props": [
-        {
-          "name": "airom:model.provider",
-          "value": "openai"
-        },
         {
           "name": "airom:model.id",
           "value": "gpt-4o"
@@ -455,10 +439,6 @@
         ]
       },
       "props": [
-        {
-          "name": "airom:model.provider",
-          "value": "openai"
-        },
         {
           "name": "airom:model.id",
           "value": "gpt-4-32k"

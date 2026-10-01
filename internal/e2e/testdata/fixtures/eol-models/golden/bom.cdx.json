@@ -117,10 +117,6 @@
           "value": "anthropic"
         },
         {
-          "name": "airom:model.provider",
-          "value": "anthropic"
-        },
-        {
           "name": "airom:param.max_tokens",
           "value": "64 @ app.py:44"
         }
@@ -183,10 +179,6 @@
         {
           "name": "airom:model.id",
           "value": "gpt-4-turbo"
-        },
-        {
-          "name": "airom:model.provider",
-          "value": "openai"
         },
         {
           "name": "airom:model.provider",
@@ -322,10 +314,6 @@
           "value": "anthropic"
         },
         {
-          "name": "airom:model.provider",
-          "value": "anthropic"
-        },
-        {
           "name": "airom:param.max_tokens",
           "value": "64 @ app.py:38"
         }
@@ -356,10 +344,6 @@
         {
           "name": "airom:model.id",
           "value": "gpt-4o"
-        },
-        {
-          "name": "airom:model.provider",
-          "value": "openai"
         },
         {
           "name": "airom:model.provider",
@@ -498,10 +482,6 @@
         {
           "name": "airom:model.id",
           "value": "gpt-4-32k"
-        },
-        {
-          "name": "airom:model.provider",
-          "value": "openai"
         },
         {
           "name": "airom:model.provider",

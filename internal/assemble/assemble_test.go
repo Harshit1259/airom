@@ -61,18 +61,26 @@ func TestClassCollision(t *testing.T) {
 	if n := len(c.Evidence.Occurrences); n != 2 {
 		t.Errorf("occurrences = %d, want 2 (one component, both sightings)", n)
 	}
-	// hosted models get NO purl (D9) but do get airom:model.* props
+	// hosted models get NO purl (D9); identity is bom-ref + provider + model id
 	if c.PURL != "" {
 		t.Errorf("purl = %q, want empty for hosted model", c.PURL)
 	}
-	var hasProvider bool
+	// Provider lives in the typed field, which is what every writer projects
+	// airom:model.provider from; only the id has no typed home and so is a prop.
+	if got, _ := c.Provider.Value(); got != "openai" {
+		t.Errorf("provider = %q, want openai", got)
+	}
+	var hasID bool
 	for _, p := range c.Props {
-		if p.Name == "airom:model.provider" && p.Value == "openai" {
-			hasProvider = true
+		if p.Name == "airom:model.id" && p.Value == "text-embedding-3-large" {
+			hasID = true
+		}
+		if p.Name == "airom:model.provider" {
+			t.Errorf("provider is duplicated into props; it belongs to c.Provider alone")
 		}
 	}
-	if !hasProvider {
-		t.Errorf("missing airom:model.provider prop: %+v", c.Props)
+	if !hasID {
+		t.Errorf("missing airom:model.id prop: %+v", c.Props)
 	}
 }
 
@@ -98,10 +106,8 @@ func TestModelFoldProviderless(t *testing.T) {
 	if len(c.Evidence.Occurrences) != 2 {
 		t.Errorf("occurrences = %d, want 2 (code + config)", len(c.Evidence.Occurrences))
 	}
-	for _, p := range c.Props {
-		if p.Name == "airom:model.provider" && p.Value != "openai" {
-			t.Errorf("provider prop = %q, want openai", p.Value)
-		}
+	if got, _ := c.Provider.Value(); got != "openai" {
+		t.Errorf("provider = %q, want openai", got)
 	}
 }
 

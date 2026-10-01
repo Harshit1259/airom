@@ -36,7 +36,10 @@ func BuildFixture() *airom.Inventory {
 		Confidence: 0.8738,
 		Model:      &airom.ModelFacet{Task: airom.KnownString("text-generation"), Architecture: airom.UnknownString()},
 		Props: []airom.KV{
-			{Name: "airom:model.provider", Value: "openai"},
+			// No airom:model.provider here: the assembler stopped writing it,
+			// because Provider above is the typed source every writer projects
+			// it from. A fixture that still carried it would model behavior
+			// the assembler no longer has.
 			{Name: "airom:model.id", Value: "gpt-4.1"},
 			{Name: "airom:param.temperature", Value: "0.2 @ src/rag.py:8"},
 		},
