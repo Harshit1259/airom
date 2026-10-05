@@ -102,8 +102,16 @@ the edit is readable before it is made.
    OSV again, and the row shows `✔ upgraded` with the version that is now
    actually in place, or `! failed` with the package manager's own reason.
 
-If the package manager refuses the new version (an npm `ERESOLVE` peer
-conflict, a pip `No matching distribution`), the pin is **put back**, so the
+If the package manager refuses the new version because it cannot coexist with
+the rest of the project — an npm `ERESOLVE` peer conflict, or an install that
+exits 0 but leaves a tree `npm ls` reports invalid — the attempt is **rolled
+back** (manifest, lockfile, and installed packages) and the next clean release
+is tried: the newest on the same line, then the lowest and newest of each newer
+line. For example, npm `langchain@0.0.200`: 0.3.37 hits a peer conflict on
+`@langchain/core`, 1.2.3 installs but pins `@langchain/core` 1.1.8 while its own
+langgraph needs `^1.1.48`, and 1.5.15 installs cleanly — so the row ends on
+1.5.15 and says which versions did not fit. If no clean release fits, every
+attempt is undone and the row shows the package manager's reason, so the
 manifest never names a version its lockfile and environment do not have. If no
 installer can run (no `.venv` for pip, the tool is not on PATH) the row shows
 `✔ pinned` and says what is missing. `--fix-pin-only` restores the old

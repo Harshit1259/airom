@@ -546,6 +546,9 @@ func upgradeStatus(r fix.UpgradeResult) (statusKind, string) {
 			v = r.To
 		}
 		msg := fmt.Sprintf("%s %s → %s installed%s", r.Package, r.From, v, osv)
+		if n := len(r.Tried); n > 1 {
+			msg += fmt.Sprintf(" · %s did not fit the project, so the next clean line was used", strings.Join(r.Tried[:n-1], ", "))
+		}
 		if r.Reason != "" {
 			msg += " · " + r.Reason
 		}
@@ -706,6 +709,9 @@ func (m *model) bodyRow(i int) string {
 		raw[colInstalled] = t.Current
 		if st.up != nil && st.up.Installed != "" && st.applied {
 			raw[colInstalled] = st.up.Installed
+		}
+		if st.up != nil && st.applied && st.up.To != t.Fixed {
+			raw[colFixTo] = st.up.To // a fallback line was what fit
 		}
 		raw[colFixTo] = fixToLabel(t)
 		raw[colAction] = m.actionLabel(r.target)

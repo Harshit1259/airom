@@ -44,9 +44,10 @@ var (
 )
 
 // maxCandidates caps how many releases above the advisory floor are checked
-// against OSV for one package. One batch request covers all of them; the cap
-// keeps that request small for a package with thousands of releases.
-const maxCandidates = 40
+// against OSV for one package. One batch request covers all of them (OSV takes
+// up to 1000); the cap keeps it bounded for a package with thousands of
+// releases, while still reaching the newer major lines Alternatives draws on.
+const maxCandidates = 300
 
 // ResolveOptions configures Resolve.
 type ResolveOptions struct {
@@ -169,6 +170,7 @@ func resolveOne(ctx context.Context, client Doer, t *Target) {
 				t.Note = fmt.Sprintf("advisory says %s; first release with no known advisory is %s", t.Advisory, c)
 			}
 			t.Major = crossesMajor(t.Current, t.Fixed)
+			t.Alternatives = fallbacks(cands[i+1:], counts[i+1:], c)
 			return
 		}
 	}
@@ -178,6 +180,55 @@ func resolveOne(ctx context.Context, client Doer, t *Target) {
 	t.Note = fmt.Sprintf("%s clears the advisories found, but OSV still lists %d against it; no release up to %s is clean",
 		cands[0], counts[0], cands[len(cands)-1])
 	t.Major = crossesMajor(t.Current, t.Fixed)
+}
+
+// fallbacks returns the clean releases an upgrade tries, in order, when the
+// package manager will not accept chosen alongside the rest of the project:
+// the newest clean release on chosen's own line, then the lowest and the newest
+// clean release of each newer line. Capped, because each attempt is a real
+// install.
+//
+// Lowest AND newest per line, because neither alone is enough. The lowest is
+// the smallest move; but a single release can be broken on its own —
+// langchain 1.2.3 pins @langchain/core 1.1.8 while its own dependencies need
+// ^1.1.48 — and the newest on the same line is where that gets repaired.
+func fallbacks(cands []string, counts []int, chosen string) []string {
+	const maxFallbacks = 6
+	cv, _ := parseVersion(chosen)
+	type span struct{ lo, hi string }
+	lines := map[[2]int]*span{}
+	var order [][2]int
+	for i, c := range cands {
+		if counts[i] != 0 {
+			continue
+		}
+		v, ok := parseVersion(c)
+		if !ok {
+			continue
+		}
+		l := compatLine(v)
+		if lines[l] == nil {
+			lines[l] = &span{lo: c}
+			order = append(order, l)
+		}
+		lines[l].hi = c
+	}
+	var out []string
+	add := func(v string) {
+		if v != "" && v != chosen && len(out) < maxFallbacks && (len(out) == 0 || out[len(out)-1] != v) {
+			out = append(out, v)
+		}
+	}
+	for _, l := range order {
+		sp := lines[l]
+		if l == compatLine(cv) {
+			add(sp.hi)
+			continue
+		}
+		add(sp.lo)
+		add(sp.hi)
+	}
+	return out
 }
 
 // registryVersions returns the package's stable, non-yanked releases in

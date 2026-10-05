@@ -58,6 +58,13 @@ type UpgradeResult struct {
 	// the check did not run.
 	Installed  string
 	Advisories int
+
+	// Conflict reports that the package manager refused the version because
+	// it cannot coexist with the rest of the project, as opposed to a network
+	// error or a missing tool. Only a conflict is worth retrying on another line.
+	Conflict bool
+	// Tried lists every version attempted, in order; the last is To.
+	Tried []string
 }
 
 // Upgrade moves one package from its vulnerable version to t.Fixed for real.
@@ -72,7 +79,40 @@ type UpgradeResult struct {
 // Afterwards the installed version is read back from the environment and
 // checked against OSV, so "upgraded" means the new version is what is there,
 // not that a command exited zero.
+//
+// When the package manager refuses the version because it cannot coexist with
+// the rest of the project — a peer range another package pins, a dependency
+// that wants an older line — the attempt is undone and the next clean release
+// on a newer line (t.Alternatives) is tried. Tried lists every version
+// attempted, in order.
 func Upgrade(ctx context.Context, root string, t Target, opts UpgradeOptions) UpgradeResult {
+	var tried []string
+	for _, v := range append([]string{t.Fixed}, t.Alternatives...) {
+		attempt := t
+		attempt.Fixed = v
+		attempt.Major = crossesMajor(t.Current, v)
+		res := upgradeOnce(ctx, root, attempt, opts)
+		tried = append(tried, v)
+		res.Tried = tried
+		if res.Status != UpgradeFailed || !res.Conflict || !opts.Install {
+			return res
+		}
+		if opts.Out != nil {
+			fmt.Fprintf(opts.Out, "  %s %s does not fit the rest of the project; trying the next clean line\n", t.Package, v)
+		}
+		if len(tried) == 1+len(t.Alternatives) {
+			if len(tried) > 1 {
+				res.Reason = fmt.Sprintf("no clean release fits the rest of the project (tried %s); %s",
+					strings.Join(tried, ", "), res.Reason)
+			}
+			return res
+		}
+	}
+	return UpgradeResult{} // unreachable: the loop always returns
+}
+
+// upgradeOnce attempts one target version.
+func upgradeOnce(ctx context.Context, root string, t Target, opts UpgradeOptions) UpgradeResult {
 	res := UpgradeResult{Package: t.Package, From: t.Current, To: t.Fixed, Advisories: -1}
 	out := opts.Out
 	if out == nil {
@@ -119,6 +159,19 @@ func upgradePinned(ctx context.Context, root string, t Target, opts UpgradeOptio
 	if opts.Verify {
 		baseline = Verify(ctx, root, Manifests([]Target{t}))
 	}
+
+	// Whether the tree is consistent now, before anything moves, so a broken
+	// tree afterwards can be blamed on this attempt and undone.
+	cleanBefore := map[string]bool{}
+	for _, m := range Manifests([]Target{t}) {
+		if ok, checked := Consistent(ctx, root, m); checked {
+			cleanBefore[m] = ok
+		}
+	}
+
+	// The manifests and lockfiles as they are, BEFORE the pin moves, so an
+	// install that leaves a broken tree can be put back exactly.
+	snap := snapshotResolverFiles(root, Manifests([]Target{t}))
 
 	pins, err := Apply(root, t)
 	res.Pins = pins
@@ -178,6 +231,7 @@ func upgradePinned(ctx context.Context, root string, t Target, opts UpgradeOptio
 				}
 			}
 			res.Status, res.Detail = UpgradeFailed, ir.Detail
+			res.Conflict = isConflict(ir.Detail)
 			if restored {
 				res.Pins = nil
 				res.Reason = fmt.Sprintf("%s could not install %s %s, so the pin was put back", ir.Tool, t.Package, t.Fixed)
@@ -189,10 +243,56 @@ func upgradePinned(ctx context.Context, root string, t Target, opts UpgradeOptio
 			res.Status = UpgradePinned
 			res.Reason = "pin rewritten; not installed: " + ir.Reason
 		case InstallDirty:
+			if cleanBefore[ir.Manifest] {
+				// The install worked and broke the tree. Put the pin, the
+				// lockfile and the installed packages back, and let Upgrade
+				// try another version.
+				snap.restore() // the pre-attempt manifest and lockfile, pin included
+				Install(ctx, root, manifests, out)
+				res.Pins, res.Status, res.Conflict, res.Detail = nil, UpgradeFailed, true, ir.Detail
+				res.Reason = fmt.Sprintf("%s installed %s %s, but the result has packages whose dependency ranges are not met, so it was rolled back",
+					ir.Tool, t.Package, t.Fixed)
+				return
+			}
 			if res.Status == UpgradeDone {
 				res.Reason = ir.Reason
 			}
 		}
+	}
+}
+
+// snapshot holds the bytes of the files a package manager rewrites, so a
+// rejected attempt can be undone exactly.
+type snapshot map[string][]byte // absolute path -> content; nil = did not exist
+
+func snapshotResolverFiles(root string, manifests []string) snapshot {
+	s := snapshot{}
+	for _, m := range manifests {
+		abs, err := resolveInRoot(root, m)
+		if err != nil {
+			continue
+		}
+		dir := filepath.Dir(abs)
+		for _, name := range []string{path.Base(m), "package-lock.json", "pnpm-lock.yaml", "yarn.lock", "go.sum", "uv.lock"} {
+			p := filepath.Join(dir, name)
+			data, err := os.ReadFile(p) // #nosec G304 -- under the scan root
+			if err != nil {
+				s[p] = nil
+				continue
+			}
+			s[p] = data
+		}
+	}
+	return s
+}
+
+func (s snapshot) restore() {
+	for p, data := range s {
+		if data == nil {
+			_ = os.Remove(p)
+			continue
+		}
+		_ = writeFileAtomic(p, data, 0o644)
 	}
 }
 
@@ -216,8 +316,20 @@ func upgradeDirect(ctx context.Context, root string, t Target, out io.Writer, re
 				rel = r
 			}
 		}
+		check := consistencyFor(t.Ecosystem, argv[0])
+		before := check == nil || consistentIn(ctx, dir, check)
+		snap := snapshotResolverFiles(root, []string{filepath.ToSlash(filepath.Join(rel, "package.json"))})
 		fmt.Fprintf(out, "  $ %s   (in %s)\n", strings.Join(argv, " "), filepath.ToSlash(rel))
 		tail, halted, err := runStreaming(ctx, dir, argv, InstallTimeout, out, "    ")
+		if err == nil && check != nil && before && !consistentIn(ctx, dir, check) {
+			// Exit zero, broken tree: undo it and let Upgrade try another version.
+			snap.restore()
+			_, _, _ = runStreaming(ctx, dir, []string{argv[0], "install"}, InstallTimeout, out, "    ")
+			res.Status, res.Conflict = UpgradeFailed, true
+			res.Reason = fmt.Sprintf("%s installed %s %s, but the result has packages whose dependency ranges are not met, so it was rolled back",
+				path.Base(argv[0]), t.Package, t.Fixed)
+			return
+		}
 		ir := InstallResult{Manifest: filepath.ToSlash(rel), Tool: path.Base(argv[0]), Status: InstallOK}
 		if err != nil {
 			ir.Status, ir.Detail = InstallFailed, tail
@@ -227,6 +339,7 @@ func upgradeDirect(ctx context.Context, root string, t Target, out io.Writer, re
 			}
 			res.Install = append(res.Install, ir)
 			res.Status, res.Reason, res.Detail = UpgradeFailed, ir.Reason, tail
+			res.Conflict = isConflict(tail)
 			return
 		}
 		res.Install = append(res.Install, ir)
@@ -235,6 +348,19 @@ func upgradeDirect(ctx context.Context, root string, t Target, out io.Writer, re
 	if ran {
 		res.Status = UpgradeDone
 	}
+}
+
+// consistencyFor is the tree check for a direct upgrade's tool, when one is wired.
+func consistencyFor(eco, tool string) []string {
+	if eco == "npm" && tool == "npm" {
+		return npmConsistency("")
+	}
+	return nil
+}
+
+func consistentIn(ctx context.Context, dir string, argv []string) bool {
+	_, _, err := run(ctx, dir, argv, probeTimeout)
+	return err == nil
 }
 
 // directCommand builds the package-manager command for one direct site.
@@ -371,6 +497,21 @@ func errString(err error) string {
 		return "nothing was changed"
 	}
 	return err.Error()
+}
+
+// isConflict reports whether a package manager's failure is a dependency
+// conflict: the version exists and was fetched, but cannot coexist with what
+// the project already has.
+func isConflict(detail []string) bool {
+	for _, l := range detail {
+		low := strings.ToLower(l)
+		if strings.Contains(l, "ERESOLVE") || strings.Contains(low, "could not resolve dependency") ||
+			strings.Contains(low, "conflicting dependencies") || strings.Contains(low, "resolutionimpossible") ||
+			strings.Contains(low, "conflicting peer dependency") || strings.Contains(l, "ERR_PNPM_PEER") {
+			return true
+		}
+	}
+	return false
 }
 
 // Headline picks the line of a failed tool's output that says what went wrong:

@@ -43,6 +43,10 @@ type InstallResult struct {
 	Reason   string   // why it was skipped, or how it failed
 	Detail   []string // the tail of the tool's own output, when it failed
 	Wrote    []string // what the tool is expected to have created or rewritten
+
+	// Introduced reports, for a dirty result, that the environment was
+	// consistent before this install: the install is what broke it.
+	Introduced bool
 }
 
 // InstallTimeout caps one package-manager run. Far longer than VerifyTimeout
@@ -117,6 +121,10 @@ var installers = map[string][]installer{
 		{
 			tool: "npm", when: always,
 			probe: []string{"npm", "--version"}, writes: []string{"package-lock.json", "node_modules/"},
+			// npm exits 0 and leaves a tree where a package's peer range is
+			// not met — langchain 1.2.3 pins @langchain/core 1.1.8 while its
+			// own langgraph needs ^1.1.48. `npm ls --all` is what says so.
+			consistency: npmConsistency,
 			argv: func(string, string) [][]string {
 				return [][]string{{"npm", "install", "--no-audit", "--no-fund"}}
 			},
@@ -138,6 +146,8 @@ var installers = map[string][]installer{
 }
 
 func always(string) bool { return true }
+
+func npmConsistency(string) []string { return []string{"npm", "ls", "--all"} }
 
 // lockPresent matches a variant only when the resolver output it owns is
 // already in the project — the reliable signal for which of several
@@ -283,6 +293,7 @@ func installOne(ctx context.Context, root, manifest string, out io.Writer) Insta
 		if cerr != nil {
 			res.Status = InstallDirty
 			res.Detail = lastLines(out, tailLines)
+			res.Introduced = consistentBefore
 			if consistentBefore {
 				res.Reason = inst.tool + " exited cleanly, but the environment it produced has incompatible packages"
 			} else {
@@ -291,6 +302,29 @@ func installOne(ctx context.Context, root, manifest string, out io.Writer) Insta
 		}
 	}
 	return res
+}
+
+// Consistent runs the manifest's consistency check, when its installer has
+// one, and reports whether the installed tree agrees with itself. checked is
+// false when there is no check to run.
+//
+// Upgrade calls it BEFORE rewriting a pin. Asked after, it compares the new pin
+// with the old installed tree and always fails, which would make every broken
+// install look like one the project already had.
+func Consistent(ctx context.Context, root, manifest string) (ok, checked bool) {
+	dir, err := resolveInRoot(root, path.Dir(manifest))
+	if err != nil {
+		return false, false
+	}
+	inst, found := pickInstaller(path.Base(manifest), dir)
+	if !found || inst.consistency == nil {
+		return false, false
+	}
+	if _, err := exec.LookPath(inst.consistency(dir)[0]); err != nil && !filepath.IsAbs(inst.consistency(dir)[0]) {
+		return false, false
+	}
+	_, _, cerr := run(ctx, dir, inst.consistency(dir), probeTimeout)
+	return cerr == nil, true
 }
 
 // lastLines returns the final n non-empty lines of a command's output.

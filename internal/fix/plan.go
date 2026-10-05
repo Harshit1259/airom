@@ -62,7 +62,13 @@ type Target struct {
 	Advisory string
 	Online   Online
 	Latest   string // newest stable release on the registry
-	Note     string // what the online check found, for the detail pane
+
+	// Alternatives are clean releases on newer compatibility lines, lowest
+	// first. When the package manager refuses Fixed because it cannot coexist
+	// with the rest of the project (npm ERESOLVE, pip ResolutionImpossible),
+	// Upgrade tries these in turn.
+	Alternatives []string
+	Note         string // what the online check found, for the detail pane
 }
 
 // Site is one manifest line that pins the vulnerable version.

@@ -253,3 +253,61 @@ func TestFailedInstallPutsThePinBack(t *testing.T) {
 		t.Errorf("package.json = %q, want it restored", data)
 	}
 }
+
+// TestFallbacksPerLine: the newest clean release on the chosen line, then the
+// lowest and newest of each newer line — skipping vulnerable ones.
+func TestFallbacksPerLine(t *testing.T) {
+	cands := []string{"0.3.38", "0.3.40", "1.0.0", "1.2.3", "1.5.15", "2.0.0"}
+	counts := []int{0, 0, 1, 0, 0, 0}
+	got := fallbacks(cands, counts, "0.3.37")
+	want := []string{"0.3.40", "1.2.3", "1.5.15", "2.0.0"}
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Errorf("fallbacks = %v, want %v", got, want)
+	}
+}
+
+// TestUpgradeTriesTheNextLineOnAConflict: npm refuses 0.3.37 (ERESOLVE) and
+// leaves a broken tree for 1.2.3; Upgrade puts each back and lands on 1.5.15.
+func TestUpgradeTriesTheNextLineOnAConflict(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the stub package manager is a shell script")
+	}
+	fakeInternet(t, nil, nil, nil)
+	bin := t.TempDir()
+	// A stub npm: `ls` fails while node_modules holds 1.2.3 (a broken tree);
+	// `install` refuses 0.3.37 and otherwise "installs" what package.json pins.
+	write(t, bin, "npm", `#!/bin/sh
+v=$(sed -n 's/.*"langchain":"\([^"]*\)".*/\1/p' package.json)
+case "$1" in
+--version) echo 10.0.0 ;;
+ls) grep -q '"1.2.3"' node_modules/langchain/package.json 2>/dev/null && { echo 'npm error invalid: @langchain/core@1.1.8'; exit 1; }; exit 0 ;;
+install)
+  if [ "$v" = 0.3.37 ]; then echo 'npm error code ERESOLVE'; echo 'npm error Could not resolve dependency:'; echo 'npm error peer core@0.3 from langchain@0.3.37'; exit 1; fi
+  mkdir -p node_modules/langchain && echo "{\"version\":\"$v\"}" > node_modules/langchain/package.json ;;
+esac
+`)
+	if err := os.Chmod(filepath.Join(bin, "npm"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	root := t.TempDir()
+	orig := `{"dependencies":{"langchain":"0.0.200"}}`
+	write(t, root, "package.json", orig)
+	write(t, root, "node_modules/langchain/package.json", `{"version":"0.0.200"}`)
+	tg := target("langchain", "0.0.200", "0.3.37", "package.json", 1, orig)
+	tg.Ecosystem = "npm"
+	tg.Alternatives = []string{"1.2.3", "1.5.15"}
+
+	res := Upgrade(t.Context(), root, tg, UpgradeOptions{Install: true})
+	if res.Status != UpgradeDone || res.To != "1.5.15" || res.Installed != "1.5.15" {
+		t.Fatalf("got Status=%s To=%s Installed=%s Reason=%q", res.Status, res.To, res.Installed, res.Reason)
+	}
+	if strings.Join(res.Tried, ",") != "0.3.37,1.2.3,1.5.15" {
+		t.Errorf("Tried = %v", res.Tried)
+	}
+	data, _ := os.ReadFile(filepath.Join(root, "package.json"))
+	if !strings.Contains(string(data), `"langchain":"1.5.15"`) {
+		t.Errorf("package.json = %s", data)
+	}
+}

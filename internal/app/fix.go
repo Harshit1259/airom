@@ -140,6 +140,10 @@ func reportUpgrades(rs []fix.UpgradeResult) {
 				v = r.To
 			}
 			fmt.Fprintf(stderr, "  ✔ %s %s → %s installed%s\n", r.Package, r.From, v, osv)
+			if n := len(r.Tried); n > 1 {
+				fmt.Fprintf(stderr, "      %s did not fit the rest of the project (dependency conflict), so %s was used\n",
+					strings.Join(r.Tried[:n-1], ", "), r.To)
+			}
 		case fix.UpgradePinned:
 			fmt.Fprintf(stderr, "  ✔ %s %s → %s pinned (%s)%s\n", r.Package, r.From, r.To, r.Reason, osv)
 		default:
