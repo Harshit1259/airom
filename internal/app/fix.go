@@ -66,8 +66,14 @@ func runFixes(ctx context.Context, inv *airom.Inventory, cfg *Config) error {
 	// moves, the package manager installs it, and the result is read back and
 	// re-checked against OSV — so what the row says is what the project has.
 	opts := fix.UpgradeOptions{Install: !cfg.FixPinOnly, Verify: cfg.FixVerify, Out: io.Discard}
-	up := func(t fix.Target) fix.UpgradeResult { return fix.Upgrade(ctx, cfg.Target, t, opts) }
-	out, err := runTable(cfg.Target, targets, up)
+	hooks := fixui.Hooks{
+		Upgrade: func(t fix.Target) fix.UpgradeResult { return fix.Upgrade(ctx, cfg.Target, t, opts) },
+		Recheck: func(t fix.Target) (string, bool) { return fix.Recheck(ctx, cfg.Target, t) },
+	}
+	if cfg.FixPinOnly {
+		hooks.Recheck = nil // nothing was installed, so nothing else can have moved
+	}
+	out, err := runTable(cfg.Target, targets, hooks)
 	if errors.Is(err, fixui.ErrNoTTY) {
 		// No terminal to click in. Say what the table would have offered and
 		// name the flag that does it without one, rather than failing a scan

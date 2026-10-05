@@ -36,6 +36,16 @@ type Outcome struct {
 // a "working" status so the user can see the click was taken.
 type Upgrader func(fix.Target) fix.UpgradeResult
 
+// Rechecker reads what is installed for a package now and reports whether it
+// has reached its FIX TO version.
+type Rechecker func(fix.Target) (installed string, fixed bool)
+
+// Hooks are what a click does. Upgrade nil keeps the manifest-only edit.
+type Hooks struct {
+	Upgrade Upgrader
+	Recheck Rechecker
+}
+
 // Run takes over the terminal, draws the advisory table for targets, and
 // applies the fixes the user asks for. root is the scan root every target path
 // is relative to.
@@ -43,12 +53,11 @@ type Upgrader func(fix.Target) fix.UpgradeResult
 // It returns when the user quits. ErrNoTTY (and only ErrNoTTY) means the table
 // never opened.
 func Run(root string, targets []fix.Target) (Outcome, error) {
-	return RunWith(root, targets, nil)
+	return RunWith(root, targets, Hooks{})
 }
 
-// RunWith is Run with each click doing a real upgrade through up. A nil up
-// keeps the manifest-only edit.
-func RunWith(root string, targets []fix.Target, up Upgrader) (Outcome, error) {
+// RunWith is Run with each click doing a real upgrade through the hooks.
+func RunWith(root string, targets []fix.Target, h Hooks) (Outcome, error) {
 	if len(targets) == 0 {
 		return Outcome{}, nil
 	}
@@ -59,7 +68,7 @@ func RunWith(root string, targets []fix.Target, up Upgrader) (Outcome, error) {
 	defer s.close()
 
 	m := newModel(root, targets, tui.NewPalette(s.in))
-	m.upgrade = up
+	m.upgrade, m.recheck = h.Upgrade, h.Recheck
 	m.busy = func(msg string) {
 		m.setStatus(statusNone, msg)
 		w, h := s.size()
@@ -132,6 +141,7 @@ type model struct {
 
 	labels  []string         // PACKAGE cell per target
 	upgrade Upgrader         // nil: a click only rewrites the pin
+	recheck Rechecker        // nil: no sweep for packages fixed along the way
 	busy    func(msg string) // redraws with a working status before slow work
 }
 
@@ -258,6 +268,10 @@ func (m *model) layout(w, h int) {
 		m.grow(colPackage, m.labels[r.target])
 		m.grow(colInstalled, t.Current)
 		m.grow(colFixTo, fixToLabel(t))
+		if up := m.state[r.target].up; up != nil {
+			m.grow(colFixTo, up.To)
+			m.grow(colInstalled, up.Installed)
+		}
 		m.grow(colAction, m.actionLabel(r.target))
 		if r.vuln >= 0 {
 			m.grow(colVuln, t.Vulns[r.vuln].ID)
@@ -425,8 +439,7 @@ func (m *model) applyCursor() {
 	}
 	st := m.state[t]
 	if st.up != nil {
-		m.setStatus(upgradeStatus(*st.up))
-		return
+		return // applyUpgrade already wrote the status, including what else moved
 	}
 	switch {
 	case st.applied:
@@ -510,11 +523,66 @@ func (m *model) apply(i int) bool {
 	return true
 }
 
-// applyUpgrade runs the full upgrade for one package and records what it did.
+// applyUpgrade upgrades the clicked package everywhere it is declared — the
+// same name in every ecosystem, so one click on langchain moves the PyPI and
+// the npm copy — and then sweeps the rest of the table for packages the
+// upgrade fixed along the way.
 func (m *model) applyUpgrade(i int) bool {
+	m.upgradeOne(i)
+	first := m.state[i]
+	var also []string
+	for j, t := range m.targets {
+		if j == i || t.Package != m.targets[i].Package || m.state[j].applied || !t.Upgradable() {
+			continue
+		}
+		m.upgradeOne(j)
+		also = append(also, m.labels[j])
+	}
+	swept := m.sweep()
+
+	if first.up != nil {
+		k, msg := upgradeStatus(*first.up)
+		if len(also) > 0 {
+			msg += " · also upgraded " + strings.Join(also, ", ")
+		}
+		if len(swept) > 0 {
+			msg += " · fixed along the way: " + strings.Join(swept, ", ")
+		}
+		m.setStatus(k, msg)
+	}
+	return true
+}
+
+// sweep re-reads what is installed for every package not yet fixed, and marks
+// the ones that reached their FIX TO version as a side effect of an upgrade.
+func (m *model) sweep() []string {
+	if m.recheck == nil {
+		return nil
+	}
+	var fixed []string
+	for j, t := range m.targets {
+		if m.state[j].applied {
+			continue
+		}
+		installed, ok := m.recheck(t)
+		if !ok {
+			continue
+		}
+		res := fix.UpgradeResult{Package: t.Package, From: t.Current, To: installed, Installed: installed,
+			Status: fix.UpgradeDone, Advisories: -1, Reason: "upgraded along with its parent package"}
+		m.state[j] = rowState{applied: true, up: &res}
+		m.outcome.Upgrades = append(m.outcome.Upgrades, res)
+		m.outcome.Fixed = append(m.outcome.Fixed, t.Package)
+		fixed = append(fixed, m.labels[j]+" "+installed)
+	}
+	return fixed
+}
+
+// upgradeOne runs the full upgrade for one package and records what it did.
+func (m *model) upgradeOne(i int) {
 	t := m.targets[i]
 	if m.busy != nil {
-		m.busy(fmt.Sprintf("⟳ upgrading %s %s → %s …", t.Package, t.Current, t.Fixed))
+		m.busy(fmt.Sprintf("⟳ upgrading %s %s → %s …", m.labels[i], t.Current, t.Fixed))
 	}
 	res := m.upgrade(t)
 	m.outcome.Upgrades = append(m.outcome.Upgrades, res)
@@ -527,7 +595,6 @@ func (m *model) applyUpgrade(i int) bool {
 		m.state[i] = rowState{err: res.Reason, results: res.Pins, up: &res}
 		m.outcome.Failed++
 	}
-	return true
 }
 
 // upgradeStatus is the status line after an upgrade click.
@@ -710,10 +777,10 @@ func (m *model) bodyRow(i int) string {
 		if st.up != nil && st.up.Installed != "" && st.applied {
 			raw[colInstalled] = st.up.Installed
 		}
-		if st.up != nil && st.applied && st.up.To != t.Fixed {
-			raw[colFixTo] = st.up.To // a fallback line was what fit
-		}
 		raw[colFixTo] = fixToLabel(t)
+		if st.up != nil && st.applied && st.up.To != t.Fixed {
+			raw[colFixTo] = st.up.To // what was actually used: a fallback line, or a side effect
+		}
 		raw[colAction] = m.actionLabel(r.target)
 	}
 	raw[colVuln] = id

@@ -117,6 +117,21 @@ installer can run (no `.venv` for pip, the tool is not on PATH) the row shows
 `✔ pinned` and says what is missing. `--fix-pin-only` restores the old
 behavior, where a click only rewrites the pin.
 
+**One click covers the whole package.** A click upgrades that package in
+every ecosystem the project declares it in — langchain in `requirements.txt`
+*and* in `package.json` move together — and then re-reads what is installed for
+every other row, so a package the upgrade moved as a side effect (a transitive
+`@langchain/core` that npm upgraded along with `langchain`) is marked
+`✔ upgraded` with its new version, without a click of its own:
+
+```
+│ langchain (pypi) │ CVE-2023-36281 │ CRITICAL │ 1.3.9  │ 1.3.9 (major) │ ✔ upgraded │
+│ @langchain/core  │ CVE-2025-68665 │ HIGH     │ 1.2.14 │ 1.2.14        │ ✔ upgraded │
+│ langchain (npm)  │ CVE-2025-68665 │ HIGH     │ 1.5.15 │ 1.5.15        │ ✔ upgraded │
+✔ langchain 0.0.310 → 1.3.9 installed · OSV: no known advisories · also upgraded
+  langchain (npm) · fixed along the way: @langchain/core 1.2.14
+```
+
 A package with **no pin to rewrite** still gets a button when its package
 manager can upgrade it in place: a range in `package.json` (`"openai":
 "^4.0.0"`) is upgraded with `npm install openai@<version>` (pnpm/yarn by

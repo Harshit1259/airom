@@ -440,3 +440,50 @@ func TestSameNameDifferentEcosystem(t *testing.T) {
 		t.Errorf("labels = %v", m.labels)
 	}
 }
+
+// TestOneClickUpgradesTheWholeFamily: a click on langchain upgrades it in
+// every ecosystem it is declared in, and a package the upgrade fixed along the
+// way (a transitive @langchain/core) is marked fixed without its own click.
+func TestOneClickUpgradesTheWholeFamily(t *testing.T) {
+	ts := []fix.Target{
+		{Package: "langchain", Ecosystem: "pypi", Current: "0.0.310", Fixed: "1.3.9", Fixable: true,
+			Sites: []fix.Site{{File: "requirements.txt", Line: 1}}, Vulns: []fix.Vuln{vuln("CVE-A", airom.VulnCritical)}},
+		{Package: "@langchain/core", Ecosystem: "npm", Current: "0.0.11", Fixed: "0.3.80",
+			Reason: "only seen in a lockfile", Vulns: []fix.Vuln{vuln("CVE-B", airom.VulnHigh)}},
+		{Package: "langchain", Ecosystem: "npm", Current: "0.0.200", Fixed: "0.3.37", Fixable: true,
+			Sites: []fix.Site{{File: "package.json", Line: 1}}, Vulns: []fix.Vuln{vuln("CVE-B", airom.VulnHigh)}},
+	}
+	m := newModel(t.TempDir(), ts, plain())
+	var calls []string
+	m.upgrade = func(tg fix.Target) fix.UpgradeResult {
+		calls = append(calls, tg.Package+"@"+tg.Ecosystem)
+		to := tg.Fixed
+		if tg.Ecosystem == "npm" {
+			to = "1.5.15" // the fallback line npm accepted
+		}
+		return fix.UpgradeResult{Package: tg.Package, From: tg.Current, To: to, Installed: to, Status: fix.UpgradeDone}
+	}
+	m.recheck = func(tg fix.Target) (string, bool) {
+		return "1.2.14", tg.Package == "@langchain/core"
+	}
+
+	m.cursor = 0
+	m.applyCursor()
+
+	if strings.Join(calls, ",") != "langchain@pypi,langchain@npm" {
+		t.Fatalf("upgrades = %v, want both langchains from one click", calls)
+	}
+	for i := range ts {
+		if !m.state[i].applied {
+			t.Errorf("row %d (%s) not fixed", i, m.labels[i])
+		}
+	}
+	if !strings.Contains(m.status, "also upgraded langchain (npm)") || !strings.Contains(m.status, "@langchain/core 1.2.14") {
+		t.Errorf("status = %q", m.status)
+	}
+	m.layout(160, 30)
+	frame := m.render(160, 30)
+	if !strings.Contains(frame, "1.5.15") {
+		t.Errorf("FIX TO should show the version actually used (1.5.15):\n%s", frame)
+	}
+}

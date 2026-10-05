@@ -486,6 +486,22 @@ func installedVersion(ctx context.Context, root string, t Target, pins []Result)
 	return ""
 }
 
+// Recheck reads what is installed for t now and reports whether it has reached
+// t.Fixed. It is how a package upgraded as a side effect of another — npm
+// moving @langchain/core when langchain moved — is recognized as fixed without
+// a click of its own.
+func Recheck(ctx context.Context, root string, t Target) (installed string, fixed bool) {
+	probe := t
+	probe.Direct = append(append([]Site(nil), t.Direct...), t.Seen...)
+	installed = installedVersion(ctx, root, probe, nil)
+	if installed == "" {
+		return "", false
+	}
+	iv, ok1 := parseVersion(installed)
+	fv, ok2 := parseVersion(t.Fixed)
+	return installed, ok1 && ok2 && compareVersions(iv, fv) >= 0
+}
+
 // sameVersion compares two version strings the way the ecosystems print them:
 // a leading "v" (Go) is not a difference.
 func sameVersion(a, b string) bool {

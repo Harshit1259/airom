@@ -56,6 +56,11 @@ type Target struct {
 	// the package manager for the exact version there.
 	Direct []Site
 
+	// Seen is every manifest or lockfile the package was found in, so a later
+	// check can read what is installed beside it — how a transitive package
+	// upgraded by its parent's upgrade is recognized as fixed.
+	Seen []Site
+
 	// Set by Resolve, which asks the package registry and OSV which version to
 	// move to. Advisory keeps the fixed version the advisories named; Fixed may
 	// then be raised to the first published release that has no advisory at all.
@@ -199,6 +204,7 @@ func targetFor(c *airom.Component) (Target, bool) {
 	}
 	t.Major = crossesMajor(current, t.Fixed)
 
+	t.Seen = seenSites(c)
 	sites, reason := pinSites(c, current)
 	if len(sites) == 0 {
 		t.Reason = reason
@@ -310,6 +316,24 @@ func directSites(c *airom.Component, eco string) []Site {
 		}
 		seen[key] = true
 		out = append(out, Site{File: o.Location.Path, Line: o.Location.Line, Snippet: o.Snippet})
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].File < out[j].File })
+	return out
+}
+
+// seenSites lists the files a component was found in, one per directory,
+// leaving out copies inside node_modules (they describe a dependency's tree,
+// not the project's).
+func seenSites(c *airom.Component) []Site {
+	seen := map[string]bool{}
+	var out []Site
+	for i := range c.Evidence.Occurrences {
+		p := c.Evidence.Occurrences[i].Location.Path
+		if p == "" || strings.Contains(p, "node_modules/") || seen[path.Dir(p)] {
+			continue
+		}
+		seen[path.Dir(p)] = true
+		out = append(out, Site{File: p})
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].File < out[j].File })
 	return out
