@@ -311,3 +311,102 @@ esac
 		t.Errorf("package.json = %s", data)
 	}
 }
+
+// TestUpgradeTogetherStepsBothPackages: neither package installs alone, and
+// the partner's lowest clean release is too low for the lead. Each round moves
+// both to their next candidate, and the second round lands — in one install.
+func TestUpgradeTogetherStepsBothPackages(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the stub package manager is a shell script")
+	}
+	fakeInternet(t, nil, nil, nil)
+	bin := t.TempDir()
+	write(t, bin, "npm", `#!/bin/sh
+a=$(sed -n 's/.*"a":"\([^"]*\)".*/\1/p' package.json)
+b=$(sed -n 's/.*"b":"\([^"]*\)".*/\1/p' package.json)
+case "$1" in
+--version) echo 10.0.0 ;;
+ls) exit 0 ;;
+install)
+  if [ "$a" = 1.0.0 ] && [ "$b" = 1.0.0 ]; then exit 0; fi
+  if [ "$a" != 2.0.0 ] || [ "$b" != 3.1.0 ]; then echo 'npm error code ERESOLVE'; echo "npm error a@$a needs b>=3.1.0"; exit 1; fi
+  mkdir -p node_modules/a node_modules/b
+  echo '{"version":"2.0.0"}' > node_modules/a/package.json
+  echo '{"version":"3.1.0"}' > node_modules/b/package.json ;;
+esac
+`)
+	if err := os.Chmod(filepath.Join(bin, "npm"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	root := t.TempDir()
+	orig := `{"dependencies":{"a":"1.0.0","b":"1.0.0"}}`
+	write(t, root, "package.json", orig)
+	a := target("a", "1.0.0", "2.0.0", "package.json", 1, orig)
+	b := target("b", "1.0.0", "3.0.0", "package.json", 1, orig)
+	a.Ecosystem, b.Ecosystem = "npm", "npm"
+	b.Alternatives = []string{"3.1.0"}
+
+	if got := Partners([]Target{a, b}, 0); len(got) != 1 || got[0] != 1 {
+		t.Fatalf("Partners = %v, want b as a's partner", got)
+	}
+	rs := UpgradeTogether(t.Context(), root, []Target{a, b}, UpgradeOptions{Install: true})
+	if rs[0].Status != UpgradeDone || rs[1].Status != UpgradeDone {
+		t.Fatalf("got %+v", rs)
+	}
+	if rs[0].Installed != "2.0.0" || rs[1].Installed != "3.1.0" {
+		t.Errorf("installed a=%s b=%s", rs[0].Installed, rs[1].Installed)
+	}
+	if strings.Join(rs[1].Tried, ",") != "3.0.0,3.1.0" {
+		t.Errorf("b tried %v", rs[1].Tried)
+	}
+	data, _ := os.ReadFile(filepath.Join(root, "package.json"))
+	if string(data) != `{"dependencies":{"a":"2.0.0","b":"3.1.0"}}` {
+		t.Errorf("package.json = %s", data)
+	}
+}
+
+// TestUpgradeTogetherPutsEverythingBack: when no round installs, every pin is
+// restored byte-for-byte.
+func TestUpgradeTogetherPutsEverythingBack(t *testing.T) {
+	if runtime.GOOS == "windows" {
+		t.Skip("the stub package manager is a shell script")
+	}
+	fakeInternet(t, nil, nil, nil)
+	bin := t.TempDir()
+	write(t, bin, "npm", "#!/bin/sh\n[ \"$1\" = --version ] && { echo 10; exit 0; }\n[ \"$1\" = ls ] && exit 0\ngrep -q '\"1.0.0\",\"b\":\"1.0.0\"' package.json && exit 0\necho 'npm error code ERESOLVE'; exit 1\n")
+	if err := os.Chmod(filepath.Join(bin, "npm"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+string(os.PathListSeparator)+os.Getenv("PATH"))
+
+	root := t.TempDir()
+	orig := `{"dependencies":{"a":"1.0.0","b":"1.0.0"}}`
+	write(t, root, "package.json", orig)
+	a := target("a", "1.0.0", "2.0.0", "package.json", 1, orig)
+	b := target("b", "1.0.0", "3.0.0", "package.json", 1, orig)
+	a.Ecosystem, b.Ecosystem = "npm", "npm"
+
+	rs := UpgradeTogether(t.Context(), root, []Target{a, b}, UpgradeOptions{Install: true})
+	if rs[0].Status != UpgradeFailed || !rs[0].Conflict || !strings.Contains(rs[0].Reason, "every pin was put back") {
+		t.Fatalf("got %+v", rs[0])
+	}
+	if data, _ := os.ReadFile(filepath.Join(root, "package.json")); string(data) != orig {
+		t.Errorf("package.json = %s, want it restored", data)
+	}
+}
+
+// TestPinOnlyChecksTheNewVersion: with nothing installed, the closing OSV
+// check is about the version the pin now names, not the old installed copy.
+func TestPinOnlyChecksTheNewVersion(t *testing.T) {
+	fakeInternet(t, nil, nil, map[string]int{"langchain@0.0.310": 21})
+	root := t.TempDir()
+	write(t, root, "requirements.txt", "langchain==0.0.310\n")
+	tg := target("langchain", "0.0.310", "1.3.9", "requirements.txt", 1, "langchain==0.0.310")
+	tg.Ecosystem = "pypi"
+	res := Upgrade(t.Context(), root, tg, UpgradeOptions{})
+	if res.Status != UpgradePinned || res.Advisories != 0 || res.Installed != "" {
+		t.Errorf("got Status=%s Advisories=%d Installed=%q", res.Status, res.Advisories, res.Installed)
+	}
+}

@@ -136,10 +136,15 @@ func upgradeOnce(ctx context.Context, root string, t Target, opts UpgradeOptions
 		return res
 	}
 
-	res.Installed = installedVersion(ctx, root, t, res.Pins)
-	check := res.Installed
-	if check == "" {
-		check = t.Fixed
+	check := t.Fixed
+	if res.Status == UpgradeDone {
+		// Only after an install is the environment's copy the new one. With
+		// nothing installed, it is still the old release, and checking that
+		// would report the advisories the pin just moved away from.
+		res.Installed = installedVersion(ctx, root, t, res.Pins)
+		if res.Installed != "" {
+			check = res.Installed
+		}
 	}
 	if n, err := CheckVersion(ctx, opts.HTTP, t.Ecosystem, t.Package, check); err == nil {
 		res.Advisories = n
@@ -259,6 +264,143 @@ func upgradePinned(ctx context.Context, root string, t Target, opts UpgradeOptio
 			}
 		}
 	}
+}
+
+// UpgradeTogether upgrades several pinned packages in ONE package-manager run.
+//
+// It is for the conflict a single upgrade cannot get past: langchain 1.3.9
+// needs a newer langchain-core, and the same requirements.txt pins
+// langchain-core==0.0.13 — itself vulnerable. Bumping either alone is refused
+// by pip; bumping both in one install is the actual fix. All the pins move,
+// the package manager runs once, and either everything lands or everything is
+// put back exactly as it was (manifests, lockfiles, installed packages).
+//
+// Each round moves every package to its next candidate (its FIX TO, then its
+// Alternatives) until one round installs cleanly. Versions have to move in
+// step: langchain 1.3.9 needs langchain-core >=1.4.6, so pairing it with
+// langchain-core's lowest clean release (1.3.3) fails where pairing it with
+// the newest clean one succeeds.
+func UpgradeTogether(ctx context.Context, root string, ts []Target, opts UpgradeOptions) []UpgradeResult {
+	rounds := 1
+	for _, t := range ts {
+		rounds = max(rounds, 1+len(t.Alternatives))
+	}
+	tried := make([][]string, len(ts))
+	var rs []UpgradeResult
+	for k := 0; k < rounds; k++ {
+		round := make([]Target, len(ts))
+		for i, t := range ts {
+			cands := append([]string{t.Fixed}, t.Alternatives...)
+			round[i] = t
+			round[i].Fixed = cands[min(k, len(cands)-1)]
+			if n := len(tried[i]); n == 0 || tried[i][n-1] != round[i].Fixed {
+				tried[i] = append(tried[i], round[i].Fixed)
+			}
+		}
+		rs = upgradeTogetherOnce(ctx, root, round, opts)
+		for i := range rs {
+			rs[i].Tried = append([]string(nil), tried[i]...)
+		}
+		if rs[0].Status != UpgradeFailed || !rs[0].Conflict {
+			return rs
+		}
+	}
+	return rs
+}
+
+func upgradeTogetherOnce(ctx context.Context, root string, ts []Target, opts UpgradeOptions) []UpgradeResult {
+	out := opts.Out
+	if out == nil {
+		out = io.Discard
+	}
+	results := make([]UpgradeResult, len(ts))
+	for i, t := range ts {
+		results[i] = UpgradeResult{Package: t.Package, From: t.Current, To: t.Fixed, Advisories: -1, Tried: []string{t.Fixed}}
+	}
+	fail := func(reason string, detail []string, conflict bool) []UpgradeResult {
+		for i := range results {
+			results[i].Status, results[i].Reason, results[i].Detail = UpgradeFailed, reason, detail
+			results[i].Conflict, results[i].Pins = conflict, nil
+		}
+		return results
+	}
+
+	manifests := Manifests(ts)
+	cleanBefore := map[string]bool{}
+	for _, m := range manifests {
+		if ok, checked := Consistent(ctx, root, m); checked {
+			cleanBefore[m] = ok
+		}
+	}
+	snap := snapshotResolverFiles(root, manifests)
+
+	for i, t := range ts {
+		pins, err := Apply(root, t)
+		if err != nil || len(pins) == 0 {
+			snap.restore()
+			return fail(fmt.Sprintf("%s: %s", t.Package, errString(err)), nil, false)
+		}
+		results[i].Pins = pins
+	}
+	if !opts.Install {
+		for i := range results {
+			results[i].Status, results[i].Reason = UpgradePinned, "pin rewritten; the package manager was not run"
+		}
+		return results
+	}
+
+	for _, ir := range Install(ctx, root, manifests, out) {
+		broke := ir.Status == InstallDirty && cleanBefore[ir.Manifest]
+		if ir.Status != InstallFailed && !broke {
+			if ir.Status == InstallSkipped {
+				for i := range results {
+					results[i].Status, results[i].Reason = UpgradePinned, "pins rewritten; not installed: "+ir.Reason
+				}
+				return results
+			}
+			continue
+		}
+		snap.restore()
+		Install(ctx, root, manifests, out) // bring the environment back to the restored pins
+		return fail(fmt.Sprintf("%s could not install these versions together, so every pin was put back", ir.Tool),
+			ir.Detail, isConflict(ir.Detail) || broke)
+	}
+
+	for i, t := range ts {
+		results[i].Status = UpgradeDone
+		results[i].Installed = installedVersion(ctx, root, t, results[i].Pins)
+		check := t.Fixed
+		if results[i].Installed != "" {
+			check = results[i].Installed
+		}
+		if n, err := CheckVersion(ctx, opts.HTTP, t.Ecosystem, t.Package, check); err == nil {
+			results[i].Advisories = n
+		}
+	}
+	return results
+}
+
+// Partners returns the other targets that could be upgraded in the same run as
+// ts[i]: pinned, same ecosystem, and declared in a manifest ts[i] is declared
+// in — the packages a resolver weighs against it.
+func Partners(ts []Target, i int) []int {
+	files := map[string]bool{}
+	for _, s := range ts[i].Sites {
+		files[s.File] = true
+	}
+	var out []int
+	for j, t := range ts {
+		if j == i || !t.Fixable || t.Ecosystem != ts[i].Ecosystem {
+			continue
+		}
+		for _, s := range t.Sites {
+			if files[s.File] {
+				out = append(out, j)
+				break
+			}
+		}
+	}
+	return out
 }
 
 // snapshot holds the bytes of the files a package manager rewrites, so a

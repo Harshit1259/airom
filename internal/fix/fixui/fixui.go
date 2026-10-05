@@ -42,8 +42,9 @@ type Rechecker func(fix.Target) (installed string, fixed bool)
 
 // Hooks are what a click does. Upgrade nil keeps the manifest-only edit.
 type Hooks struct {
-	Upgrade Upgrader
-	Recheck Rechecker
+	Upgrade  Upgrader
+	Recheck  Rechecker
+	Together func([]fix.Target) []fix.UpgradeResult // several pinned packages in one install
 }
 
 // Run takes over the terminal, draws the advisory table for targets, and
@@ -68,7 +69,7 @@ func RunWith(root string, targets []fix.Target, h Hooks) (Outcome, error) {
 	defer s.close()
 
 	m := newModel(root, targets, tui.NewPalette(s.in))
-	m.upgrade, m.recheck = h.Upgrade, h.Recheck
+	m.upgrade, m.recheck, m.together = h.Upgrade, h.Recheck, h.Together
 	m.busy = func(msg string) {
 		m.setStatus(statusNone, msg)
 		w, h := s.size()
@@ -139,10 +140,12 @@ type model struct {
 	statusK statusKind
 	outcome Outcome
 
-	labels  []string         // PACKAGE cell per target
-	upgrade Upgrader         // nil: a click only rewrites the pin
-	recheck Rechecker        // nil: no sweep for packages fixed along the way
-	busy    func(msg string) // redraws with a working status before slow work
+	labels  []string  // PACKAGE cell per target
+	upgrade Upgrader  // nil: a click only rewrites the pin
+	recheck Rechecker // nil: no sweep for packages fixed along the way
+
+	together func([]fix.Target) []fix.UpgradeResult // nil: no joint upgrade on a conflict
+	busy     func(msg string)                       // redraws with a working status before slow work
 }
 
 type statusKind int
@@ -529,6 +532,10 @@ func (m *model) apply(i int) bool {
 // upgrade fixed along the way.
 func (m *model) applyUpgrade(i int) bool {
 	m.upgradeOne(i)
+	var jointly []string
+	if st := m.state[i]; st.up != nil && st.up.Status == fix.UpgradeFailed && st.up.Conflict {
+		jointly = m.upgradeJointly(i)
+	}
 	first := m.state[i]
 	var also []string
 	for j, t := range m.targets {
@@ -545,12 +552,60 @@ func (m *model) applyUpgrade(i int) bool {
 		if len(also) > 0 {
 			msg += " · also upgraded " + strings.Join(also, ", ")
 		}
+		if len(jointly) > 0 {
+			msg += " · upgraded together with " + strings.Join(jointly, ", ") + " (they could not move separately)"
+		}
 		if len(swept) > 0 {
 			msg += " · fixed along the way: " + strings.Join(swept, ", ")
 		}
 		m.setStatus(k, msg)
 	}
 	return true
+}
+
+// upgradeJointly retries a package whose upgrade conflicted, together with the
+// other vulnerable packages pinned beside it, in one install. Returns the
+// partners' labels when that worked.
+func (m *model) upgradeJointly(i int) []string {
+	if m.together == nil {
+		return nil
+	}
+	var group []int
+	for _, j := range fix.Partners(m.targets, i) {
+		if !m.state[j].applied {
+			group = append(group, j)
+		}
+	}
+	if len(group) == 0 {
+		return nil
+	}
+	ts := []fix.Target{m.targets[i]}
+	var labels []string
+	for _, j := range group {
+		ts = append(ts, m.targets[j])
+		labels = append(labels, m.labels[j])
+	}
+	if m.busy != nil {
+		m.busy(fmt.Sprintf("⟳ %s conflicts on its own; upgrading it together with %s …", m.labels[i], strings.Join(labels, ", ")))
+	}
+	rs := m.together(ts)
+	if len(rs) == 0 || rs[0].Status == fix.UpgradeFailed {
+		if len(rs) > 0 {
+			r := rs[0]
+			r.Reason = "on its own and together with " + strings.Join(labels, ", ") + ": " + r.Reason
+			m.state[i] = rowState{err: r.Reason, up: &r}
+		}
+		return nil
+	}
+	m.outcome.Failed-- // the solo attempt's failure is superseded
+	for k, idx := range append([]int{i}, group...) {
+		r := rs[k]
+		m.outcome.Upgrades = append(m.outcome.Upgrades, r)
+		m.outcome.Applied = append(m.outcome.Applied, r.Pins...)
+		m.outcome.Fixed = append(m.outcome.Fixed, r.Package)
+		m.state[idx] = rowState{applied: true, results: r.Pins, up: &r}
+	}
+	return labels
 }
 
 // sweep re-reads what is installed for every package not yet fixed, and marks

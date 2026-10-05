@@ -50,15 +50,21 @@ func runFixes(ctx context.Context, inv *airom.Inventory, cfg *Config) error {
 	fmt.Fprintf(stderr, "\nairom fix: checking the package registries and OSV for the version each package should move to …\n")
 	targets = resolveTargets(ctx, targets)
 
+	if cfg.FixAll && cfg.FixInstall {
+		// The same full upgrade a click does, for every package, with no
+		// table: fallbacks, joint upgrades on a conflict, and packages fixed
+		// along the way recognized as fixed.
+		upgradeEverything(ctx, cfg, targets)
+		return nil
+	}
 	if cfg.FixAll {
 		// The baseline is taken BEFORE anything is edited, so a conflict
 		// afterwards can be attributed. Without it a manifest that already did
 		// not resolve gets blamed on the fix, and the revert offer would roll
 		// back real remediation to "solve" a problem it did not cause.
 		baseline := baselineVerify(ctx, cfg, targets)
-		applied := applyAll(cfg.Target, targets, cfg.FixInstall)
+		applied := applyAll(cfg.Target, targets)
 		installFixes(ctx, cfg, applied, verifyFixes(ctx, cfg, applied, baseline))
-		upgradeDirect(ctx, cfg, targets)
 		return nil
 	}
 
@@ -69,6 +75,9 @@ func runFixes(ctx context.Context, inv *airom.Inventory, cfg *Config) error {
 	hooks := fixui.Hooks{
 		Upgrade: func(t fix.Target) fix.UpgradeResult { return fix.Upgrade(ctx, cfg.Target, t, opts) },
 		Recheck: func(t fix.Target) (string, bool) { return fix.Recheck(ctx, cfg.Target, t) },
+		Together: func(ts []fix.Target) []fix.UpgradeResult {
+			return fix.UpgradeTogether(ctx, cfg.Target, ts, opts)
+		},
 	}
 	if cfg.FixPinOnly {
 		hooks.Recheck = nil // nothing was installed, so nothing else can have moved
@@ -104,22 +113,72 @@ var (
 	runTable = fixui.RunWith
 )
 
-// upgradeDirect finishes --fix-all --fix-install for the packages that have no
-// pin to rewrite but can be upgraded by their package manager in place.
-func upgradeDirect(ctx context.Context, cfg *Config, targets []fix.Target) {
-	if !cfg.FixInstall {
-		return
-	}
+// upgradeEverything is --fix-all --fix-install: every upgradable package gets
+// the same treatment as a click in the table.
+func upgradeEverything(ctx context.Context, cfg *Config, targets []fix.Target) {
+	opts := fix.UpgradeOptions{Install: true, Verify: cfg.FixVerify, Out: stderr}
+	done := make([]bool, len(targets))
 	var rs []fix.UpgradeResult
-	for _, t := range targets {
-		if t.Fixable || len(t.Direct) == 0 {
+	record := func(i int, r fix.UpgradeResult) {
+		rs = append(rs, r)
+		done[i] = r.Status != fix.UpgradeFailed
+	}
+	for i, t := range targets {
+		if done[i] || !t.Upgradable() {
 			continue
 		}
-		fmt.Fprintf(stderr, "\nairom fix: upgrading %s %s → %s with its package manager\n", t.Package, t.Current, t.Fixed)
-		rs = append(rs, fix.Upgrade(ctx, cfg.Target, t, fix.UpgradeOptions{Install: true, Out: stderr}))
+		fmt.Fprintf(stderr, "\nairom fix: upgrading %s %s → %s\n", t.Package, t.Current, t.Fixed)
+		r := fix.Upgrade(ctx, cfg.Target, t, opts)
+		if r.Status == fix.UpgradeFailed && r.Conflict {
+			group := []int{i}
+			for _, j := range fix.Partners(targets, i) {
+				if !done[j] {
+					group = append(group, j)
+				}
+			}
+			if len(group) > 1 {
+				ts := make([]fix.Target, len(group))
+				for k, j := range group {
+					ts[k] = targets[j]
+				}
+				fmt.Fprintf(stderr, "\nairom fix: %s conflicts on its own; upgrading %d packages together\n", t.Package, len(group))
+				joint := fix.UpgradeTogether(ctx, cfg.Target, ts, opts)
+				if joint[0].Status != fix.UpgradeFailed {
+					for k, j := range group {
+						record(j, joint[k])
+					}
+					sweepFixed(ctx, cfg, targets, done, &rs)
+					continue
+				}
+			}
+		}
+		record(i, r)
+		sweepFixed(ctx, cfg, targets, done, &rs)
 	}
-	if len(rs) > 0 {
-		reportUpgrades(rs)
+	reportUpgrades(rs)
+
+	var manual []fix.Target
+	for i, t := range targets {
+		if !done[i] && !t.Upgradable() {
+			manual = append(manual, t)
+		}
+	}
+	if len(manual) > 0 {
+		fmt.Fprintf(stderr, "\n%d package(s) need a manual change:\n%s", len(manual), fixui.Report(manual))
+	}
+}
+
+// sweepFixed marks packages another upgrade moved to their fix version.
+func sweepFixed(ctx context.Context, cfg *Config, targets []fix.Target, done []bool, rs *[]fix.UpgradeResult) {
+	for j, t := range targets {
+		if done[j] {
+			continue
+		}
+		if v, ok := fix.Recheck(ctx, cfg.Target, t); ok {
+			done[j] = true
+			*rs = append(*rs, fix.UpgradeResult{Package: t.Package, From: t.Current, To: v, Installed: v,
+				Status: fix.UpgradeDone, Advisories: -1, Reason: "upgraded along with its parent package"})
+		}
 	}
 }
 
@@ -177,7 +236,7 @@ func reportUpgrades(rs []fix.UpgradeResult) {
 // applyAll is the non-interactive path: fix everything fixable, then say
 // exactly what changed and what still needs a human. Returns what it applied,
 // for verification.
-func applyAll(root string, targets []fix.Target, direct bool) []fix.Result {
+func applyAll(root string, targets []fix.Target) []fix.Result {
 	var applied []fix.Result
 	var failed int
 	for _, t := range targets {
@@ -205,9 +264,7 @@ func applyAll(root string, targets []fix.Target, direct bool) []fix.Result {
 
 	var manual []fix.Target
 	for _, t := range targets {
-		// With --fix-install, a package the package manager can upgrade in
-		// place is not manual: upgradeDirect does it next.
-		if !t.Fixable && !(direct && t.Upgradable()) {
+		if !t.Fixable {
 			manual = append(manual, t)
 		}
 	}

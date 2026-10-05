@@ -132,6 +132,25 @@ every other row, so a package the upgrade moved as a side effect (a transitive
   langchain (npm) · fixed along the way: @langchain/core 1.2.14
 ```
 
+**Packages that can only move together.** Sometimes a package cannot move on
+its own because the same manifest pins something it depends on: langchain 1.3.9
+needs `langchain-core>=1.4.6`, and `requirements.txt` pins
+`langchain-core==0.0.13` — itself vulnerable. pip refuses langchain alone. When
+a click hits that, AIROM retries it **together** with the other vulnerable
+packages pinned in the same manifest, in one install, stepping each through its
+clean candidates in turn (langchain-core's lowest clean release, 1.3.3, is too
+old for langchain; its newest, 1.6.6, fits). Either the whole group lands or
+every pin is put back:
+
+```
+│ langchain      │ CRITICAL │ 1.4.3 │ 1.4.3 │ ✔ upgraded │
+│ langchain-core │ CRITICAL │ 1.6.6 │ 1.6.6 │ ✔ upgraded │
+✔ langchain 0.0.310 → 1.4.3 installed · upgraded together with langchain-core
+```
+
+**Without the table.** `--fix-all --fix-install` does exactly what clicking
+every row would: the same fallbacks, joint upgrades, and side-effect detection.
+
 A package with **no pin to rewrite** still gets a button when its package
 manager can upgrade it in place: a range in `package.json` (`"openai":
 "^4.0.0"`) is upgraded with `npm install openai@<version>` (pnpm/yarn by
