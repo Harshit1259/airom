@@ -182,7 +182,15 @@ func resolveInRoot(root, rel string) (string, error) {
 // the scan root, returning the resolved path. resolveInRoot checks the lexical
 // path; this checks where it actually leads.
 func realInRoot(root, abs string) (string, error) {
-	realRoot, err := filepath.EvalSymlinks(root)
+	// Absolute first. EvalSymlinks keeps a relative path relative, so for
+	// `airom scan . --fix` the root stayed "." while the manifest resolved to
+	// an absolute path, the prefix test below never matched, and every fix
+	// was refused as "a symlink outside the scan root".
+	base, err := filepath.Abs(root)
+	if err != nil {
+		return "", fmt.Errorf("resolve scan root: %w", err)
+	}
+	realRoot, err := filepath.EvalSymlinks(base)
 	if err != nil {
 		return "", fmt.Errorf("resolve scan root: %w", err)
 	}

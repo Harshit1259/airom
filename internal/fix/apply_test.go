@@ -561,3 +561,17 @@ func TestApplyRefusesSymlinkOutOfRoot(t *testing.T) {
 	}
 }
 
+// TestApplyWithRelativeRoot: `airom scan . --fix` passes the root as ".". The
+// symlink guard must compare it as an absolute path, or every edit is refused
+// as pointing outside the root.
+func TestApplyWithRelativeRoot(t *testing.T) {
+	dir := t.TempDir()
+	write(t, dir, "requirements.txt", "langchain==0.0.310\n")
+	t.Chdir(dir)
+	if _, err := applyOne(t, ".", target("langchain", "0.0.310", "1.3.9", "requirements.txt", 1, "langchain==0.0.310")); err != nil {
+		t.Fatalf("Apply with root \".\": %v", err)
+	}
+	if got, _ := os.ReadFile(filepath.Join(dir, "requirements.txt")); string(got) != "langchain==1.3.9\n" {
+		t.Errorf("requirements.txt = %q", got)
+	}
+}
