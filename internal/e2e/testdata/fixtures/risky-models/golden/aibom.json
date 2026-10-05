@@ -8,7 +8,7 @@
     "eolCatalog": "builtin"
   },
   "serial": "urn:uuid:00000000-0000-4000-8000-000000000000",
-  "timestamp": "2026-08-01T12:00:00Z",
+  "timestamp": "2026-09-29T12:00:00Z",
   "lifecycle": "pre-build",
   "source": {
     "kind": "dir",
@@ -17,11 +17,11 @@
   "root": "airom:d4e3be4126ba4a51",
   "components": [
     {
-      "id": "airom:2df08beb45af93fd",
+      "id": "airom:3148b5beb41218a8",
       "kind": "local-model-file",
-      "name": "poisoned.gguf",
+      "name": "poisoned",
       "provider": "local",
-      "purl": "pkg:generic/poisoned.gguf?checksum=sha256:bf2744e85d3b8946848bc0e1f46b4a1494262b52b5dd593973f34347b5897aca",
+      "purl": "pkg:generic/poisoned?checksum=sha256:bf2744e85d3b8946848bc0e1f46b4a1494262b52b5dd593973f34347b5897aca",
       "hashes": [
         {
           "alg": "SHA-256",
@@ -323,6 +323,7 @@
     "filesWalked": 6,
     "filesProcessed": 6,
     "filesFailed": 0,
+    "dirsPruned": 1,
     "headerBytes": 613,
     "contentBytes": 613,
     "durationNs": 0,
@@ -574,6 +575,16 @@
         "findings": 1,
         "ns": 0
       }
-    ]
+    ],
+    "enrichment": {
+      "cve": {
+        "enabled": false
+      },
+      "eol": {
+        "enabled": true,
+        "catalogLoaded": true
+      }
+    },
+    "confidenceModel": "evidence-weighted/1; not empirically calibrated"
   }
 }

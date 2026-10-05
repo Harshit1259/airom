@@ -203,9 +203,47 @@ func (b *builder) metadata() *cyclonedx.Metadata {
 	// Honesty over silence (P6): the unknown count always surfaces.
 	props.add("airom:unknowns", strconv.Itoa(len(inv.Unknowns)))
 
+	// Assurance (§6.5): the coverage account, so a CDX consumer can tell a
+	// complete scan from a partial one without the native document. Counters
+	// are emitted only when nonzero; the enrichment and confidence-model
+	// entries are emitted whenever known, because "overlay off" is exactly the
+	// fact a consumer needs.
+	if st := inv.Stats; true {
+		if st.FilesIgnored > 0 {
+			props.add("airom:assurance.filesIgnored", strconv.FormatInt(st.FilesIgnored, 10))
+		}
+		if st.DirsPruned > 0 {
+			props.add("airom:assurance.dirsPruned", strconv.FormatInt(st.DirsPruned, 10))
+		}
+		if st.FilesTruncated > 0 {
+			props.add("airom:assurance.filesTruncated", strconv.FormatInt(st.FilesTruncated, 10))
+		}
+		if e := st.Enrichment; e != nil {
+			props.add("airom:assurance.cve.enabled", strconv.FormatBool(e.CVE.Enabled))
+			if e.CVE.Unchecked > 0 {
+				props.add("airom:assurance.cve.unchecked", strconv.Itoa(e.CVE.Unchecked))
+			}
+			props.add("airom:assurance.eol.enabled", strconv.FormatBool(e.EOL.Enabled))
+		}
+		if st.ConfidenceModel != "" {
+			props.add("airom:assurance.confidenceModel", st.ConfidenceModel)
+		}
+	}
+
 	md.Properties = props.sorted()
 	return md
 }
+
+// cdxIdentityFields is the closed enum the CycloneDX schema allows for
+// evidence.identity[].field. AIROM emits a subset (name, version, purl,
+// hash); anything else it knows about a component's identity has no home
+// here and travels as a property.
+var cdxIdentityFields = map[string]bool{
+	"group": true, "name": true, "version": true, "purl": true,
+	"cpe": true, "omniborId": true, "swhid": true, "swid": true, "hash": true,
+}
+
+func cdxIdentityField(f string) bool { return cdxIdentityFields[f] }
 
 // ── component (§3.2) ────────────────────────────────────────────────────────
 
@@ -500,6 +538,15 @@ func evidence(c *airom.Component) *cyclonedx.Evidence {
 	if len(c.Evidence.Identity) > 0 {
 		ids := make([]cyclonedx.EvidenceIdentity, 0, len(c.Evidence.Identity))
 		for _, ic := range c.Evidence.Identity {
+			// evidence.identity[].field is a CLOSED enum in the spec. AIROM's
+			// own claim vocabulary is wider — versionConstraint records that a
+			// manifest declared a range while a lockfile resolved the release
+			// — and passing that through produced documents a strict consumer
+			// rejects. Claims with no slot in the enum are routed to a
+			// property instead (§6.5), never smuggled into a typed field.
+			if !cdxIdentityField(ic.Field) {
+				continue
+			}
 			ei := cyclonedx.EvidenceIdentity{
 				Field:          cyclonedx.EvidenceIdentityFieldType(ic.Field),
 				ConcludedValue: ic.Value,
@@ -564,6 +611,17 @@ func (b *builder) properties(c *airom.Component) *[]cyclonedx.Property {
 	// purl) and the constraint is carried here instead of being dropped.
 	if c.VersionConstraint != "" {
 		p.add("airom:version.constraint", c.VersionConstraint)
+	}
+
+	// Constraint CLAIMS that evidence.identity[] cannot carry, because the
+	// spec's field enum has no value for them. Repeated names are how this
+	// document already carries multi-valued facts (airom:rel.*, airom:param.*),
+	// so competing declarations each get their own entry and the disagreement
+	// survives instead of being flattened or dropped.
+	for _, ic := range c.Evidence.Identity {
+		if ic.Field == "versionConstraint" && ic.Value != "" {
+			p.add("airom:evidence.versionConstraint", ic.Value)
+		}
 	}
 
 	// ReleaseTime — any component (§3.2).
@@ -740,11 +798,27 @@ func buildVulnerabilities(inv *airom.Inventory) []cyclonedx.Vulnerability {
 				}
 				v.References = &refs
 			}
+			// CycloneDX has no slot for exploitation status — `analysis` is
+			// about the publisher's response, not CISA's observation — so the
+			// KEV record travels as properties beside the fixed version. It is
+			// deliberately NOT folded into the rating: a KEV entry is not a
+			// score, and raising the severity to signal it would publish a
+			// number nobody assigned.
+			var props propList
 			if cve.Fixed != "" {
-				var props propList
 				props.add("airom:cve.fixedVersion", cve.Fixed)
-				v.Properties = props.sorted()
 			}
+			if k := cve.KEV; k != nil {
+				props.add("airom:cve.kev.source", k.Source)
+				props.add("airom:cve.kev.added", k.Added.String())
+				if !k.Due.IsZero() {
+					props.add("airom:cve.kev.due", k.Due.String())
+				}
+				if k.Ransomware {
+					props.add("airom:cve.kev.knownRansomwareUse", "true")
+				}
+			}
+			v.Properties = props.sorted()
 			vulns = append(vulns, v)
 		}
 	}

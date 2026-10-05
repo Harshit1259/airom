@@ -378,6 +378,16 @@ func buildCVEResults(comps []airom.Component, index map[string]int) []sarifResul
 			if v.Fixed != "" {
 				props["airom:cve.fixed"] = v.Fixed
 			}
+			if k := v.KEV; k != nil {
+				props["airom:cve.kev"] = true
+				props["airom:cve.kev.added"] = k.Added.String()
+				if !k.Due.IsZero() {
+					props["airom:cve.kev.due"] = k.Due.String()
+				}
+				if k.Ransomware {
+					props["airom:cve.kev.knownRansomwareUse"] = true
+				}
+			}
 			results = append(results, sarifResult{
 				RuleID:     ruleID,
 				RuleIndex:  index[ruleID],
@@ -429,6 +439,19 @@ func cveMessage(c airom.Component, v airom.Vulnerability) string {
 		name = fmt.Sprintf("%s %s", name, ver)
 	}
 	msg := fmt.Sprintf("%s (%s) affects %s", v.ID, v.Severity, name)
+	// Exploitation goes in the message, not just a property: a Code Scanning
+	// alert is triaged from its one-line summary, and "known exploited" is the
+	// fact that decides whether this is read today or next sprint.
+	if k := v.KEV; k != nil {
+		msg += "; KNOWN EXPLOITED (CISA KEV, added " + k.Added.String()
+		if !k.Due.IsZero() {
+			msg += ", due " + k.Due.String()
+		}
+		if k.Ransomware {
+			msg += ", known ransomware use"
+		}
+		msg += ")"
+	}
 	if v.Fixed != "" {
 		msg += fmt.Sprintf("; fixed in %s", v.Fixed)
 	}

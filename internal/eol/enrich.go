@@ -37,7 +37,12 @@ func Enrich(inv *airom.Inventory, cat *Catalog, on airom.Date) int {
 		if !ok || strings.TrimSpace(provider) == "" {
 			continue // no provider → nothing to key on
 		}
-		lc := cat.Lookup(provider, modelID(c), on)
+		var lc *airom.Lifecycle
+		for _, id := range modelIDs(c) {
+			if lc = cat.Lookup(provider, id, on); lc != nil {
+				break
+			}
+		}
 		if lc == nil {
 			continue
 		}
@@ -57,13 +62,52 @@ func eligible(k airom.ComponentKind) bool {
 	return k == airom.KindHostedLLM || k == airom.KindEmbeddingModel
 }
 
-// modelID returns the provider-native id to match on: the airom:model.id prop
-// when the assembler recorded one, else the component name.
-func modelID(c *airom.Component) string {
+// modelIDs returns the catalog keys this component could match, MOST SPECIFIC
+// FIRST: the date-suffixed snapshot, then the model line it belongs to.
+//
+// Two of them are needed because identity and lifecycle are keyed differently.
+// The assembler splits "gpt-5-2025-08-07" into name "gpt-5" plus version
+// "2025-08-07", so that a pinned snapshot and the floating alias are ONE
+// component (assemble.go, normalizeKey) — deliberate, and it stays. But a
+// provider publishes retirement dates against the snapshot, and pinning one is
+// exactly what gets a shutdown date, so keying the lookup on the line alone
+// missed every snapshot record the catalog held: `model="gpt-5-2025-08-07"`
+// reported no lifecycle claim at all while the catalog said shutdown
+// 2026-12-11. Nine OpenAI records were unreachable that way.
+//
+// The snapshot is tried first because its dates are the specific truth; the
+// line is the fallback, not an override. Only the dashed -YYYY-MM-DD form is
+// reconstructed, because that is the only shape the assembler splits — an
+// Anthropic id like claude-haiku-4-5-20251001 keeps its name intact and needs
+// no reconstruction.
+func modelIDs(c *airom.Component) []string {
+	base := c.Name
 	for _, p := range c.Props {
 		if p.Name == modelIDProp && strings.TrimSpace(p.Value) != "" {
-			return p.Value
+			base = p.Value
+			break
 		}
 	}
-	return c.Name
+	if v, ok := c.Version.Value(); ok && isDateVersion(v) {
+		return []string{base + "-" + v, base}
+	}
+	return []string{base}
+}
+
+// isDateVersion reports whether v is exactly YYYY-MM-DD — the version string
+// splitDateSuffix produces. Anything else is a real version and must not be
+// glued onto a name to invent a model id that no provider published.
+func isDateVersion(v string) bool {
+	if len(v) != 10 || v[4] != '-' || v[7] != '-' {
+		return false
+	}
+	for i := range 10 {
+		if i == 4 || i == 7 {
+			continue
+		}
+		if v[i] < '0' || v[i] > '9' {
+			return false
+		}
+	}
+	return true
 }

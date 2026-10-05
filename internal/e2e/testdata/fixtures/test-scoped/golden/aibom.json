@@ -8,7 +8,7 @@
     "eolCatalog": "builtin"
   },
   "serial": "urn:uuid:00000000-0000-4000-8000-000000000000",
-  "timestamp": "2026-08-01T12:00:00Z",
+  "timestamp": "2026-09-29T12:00:00Z",
   "lifecycle": "pre-build",
   "source": {
     "kind": "dir",
@@ -70,10 +70,6 @@
       "testOnly": true,
       "props": [
         {
-          "name": "airom:model.provider",
-          "value": "anthropic"
-        },
-        {
           "name": "airom:model.id",
           "value": "claude-1.0"
         }
@@ -82,12 +78,12 @@
         "state": "retired",
         "announced": "2024-09-04",
         "shutdown": "2024-11-06",
-        "daysRemaining": -633,
+        "daysRemaining": -692,
         "replacement": "claude-haiku-4-5-20251001",
         "replacementState": "supported",
         "source": "airom-catalog",
         "sourceUrl": "https://platform.claude.com/docs/en/docs/about-claude/model-deprecations",
-        "verified": "2026-07-23"
+        "verified": "2026-09-28"
       }
     },
     {
@@ -212,10 +208,6 @@
       },
       "props": [
         {
-          "name": "airom:model.provider",
-          "value": "openai"
-        },
-        {
           "name": "airom:model.id",
           "value": "gpt-4o-mini"
         }
@@ -248,10 +240,6 @@
         ]
       },
       "props": [
-        {
-          "name": "airom:model.provider",
-          "value": "openai"
-        },
         {
           "name": "airom:model.id",
           "value": "gpt-4o"
@@ -388,10 +376,6 @@
       "testOnly": true,
       "props": [
         {
-          "name": "airom:model.provider",
-          "value": "openai"
-        },
-        {
           "name": "airom:model.id",
           "value": "gpt-4-32k"
         }
@@ -400,11 +384,11 @@
         "state": "retired",
         "announced": "2024-06-06",
         "shutdown": "2025-06-06",
-        "daysRemaining": -421,
+        "daysRemaining": -480,
         "replacement": "gpt-4o",
         "source": "airom-catalog",
         "sourceUrl": "https://developers.openai.com/api/docs/deprecations",
-        "verified": "2026-07-23"
+        "verified": "2026-09-28"
       }
     },
     {
@@ -535,6 +519,7 @@
     "filesWalked": 4,
     "filesProcessed": 4,
     "filesFailed": 0,
+    "dirsPruned": 1,
     "headerBytes": 1522,
     "contentBytes": 1522,
     "durationNs": 0,
@@ -786,6 +771,16 @@
         "findings": 10,
         "ns": 0
       }
-    ]
+    ],
+    "enrichment": {
+      "cve": {
+        "enabled": false
+      },
+      "eol": {
+        "enabled": true,
+        "catalogLoaded": true
+      }
+    },
+    "confidenceModel": "evidence-weighted/1; not empirically calibrated"
   }
 }

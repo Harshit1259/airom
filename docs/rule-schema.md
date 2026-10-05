@@ -46,7 +46,7 @@ loop, a parser, cross-file correlation, is a Go detector, not a rule
 | `capture_params` | map | no | Same-call-site generation-parameter capture |
 | `risk` | string | no | Catalog `RiskID` to attach to the claimed component (see [risks.md](./risks.md)); lint-rejected if not a known id |
 | `confidence` | float | yes | Per-sighting confidence, `0 < c ≤ 0.99` |
-| `disable` | bool | overlay only | Disables an existing rule by ID (see [Merge semantics](#the-three-rule-layers-and-merge-semantics)) |
+| `disable` | bool | overlay only | Disables an existing rule by ID (see [Merge semantics](#the-rule-layers-and-merge-semantics)) |
 
 ### `id`
 
@@ -103,7 +103,7 @@ executes only if at least one keyword hits. Consequences:
 
 - **A rule with no keywords is rejected by `airom rules lint`**, nobody can ship an
   un-prefiltered regex. This is what keeps hundreds of rules × 100k files cheap (invariant
-  P3; the shape gitleaks and semgrep both proved).
+  P3: a rule cannot reach its regex without first matching a mandatory literal).
 - Include every casing variant you need (`"ChatOpenAI"`, `"chat_openai"`).
 - Prefer selective literals (≥ 4 characters, provider-distinctive). Lint warns on keywords
   so short or common that they defeat the prefilter.
@@ -241,12 +241,17 @@ Refusal over guessing.
 Float, `0 < c ≤ 0.99`, the confidence of **one sighting by this rule alone**. Rules cannot
 assert `1.0`: certainty is reserved for hash-comparison against known weights and (v2)
 verified attestations (§9.3). Corroboration is the assembler's job, grouped noisy-OR
-across detection methods, so calibrate the single sighting honestly:
+across detection methods, so score the single sighting honestly:
 
 - `0.85–0.9`: a provider-distinctive model-ID literal in a `model=`/`model:` position.
 - `0.6–0.75`: an SDK import or call-site shape (tells you the library is present, not which
   model).
 - `≤ 0.5`: weak contextual hints.
+
+These bands are evidence weights, not measured precision: nothing yet
+establishes that rules scored 0.85 are right 85% of the time. Pick the band by
+how distinctive the evidence is, and leave proving the numbers to the
+benchmark.
 
 Repetition cannot launder into certainty: twelve sightings of one 0.85 rule assemble to
 ≈ 0.87, not 0.999.
@@ -281,20 +286,35 @@ every rules PR; command lands in Phase 3, complete validation with the Phase 5 c
 9. `confidence` ∈ (0, 0.99].
 10. **≥ 1 positive and ≥ 1 negative fixture annotation per rule**; goldens up to date.
 
-## The three rule layers and merge semantics
+<a id="the-three-rule-layers-and-merge-semantics"></a>
 
-The effective ruleset is assembled from up to three layers:
+## The rule layers and merge semantics
+
+The effective ruleset is assembled from up to four layers:
 
 ```
 1. embedded defaults    rules/**  compiled into the binary via go:embed
                         (offline by construction, versioned with the release)
         ▼  merged by rule ID
-2. user overlay         --rules extra.yaml (repeatable, applied in flag order)
+2. signed bundle        airom-rules, installed by `airom rules update` and
+                        verified against the embedded ed25519 key. Layered OVER
+                        the built-ins, never instead of them.
         ▼  merged by rule ID
-3. remote registry      v2 — OCI-distributed packs; reserved slot, pairs with
+3. user overlay         --rules extra.yaml (repeatable, applied in flag order)
+        ▼  merged by rule ID
+4. remote registry      v2 — OCI-distributed packs; reserved slot, pairs with
                         signing/trust-policy work (see ROADMAP.md). Precedence and
                         trust rules are settled with that design.
 ```
+
+Layer 2 was a replacement until v0.4.6: a scan took the cached bundle *instead
+of* the embedded packs. A bundle that omitted a pack therefore deleted it for
+every user who had run `airom rules update`, whatever their airom version — and
+that made airom-rules' own workflow (promote a stable pack into airom, delete it
+from the overlay) user-breaking, which is why 60 packs sat duplicated across the
+two repos. It is a layer now, on the same add/override/disable terms as the
+others, so the bundle can fix or retire a built-in rule without a scanner
+release and without carrying the whole vocabulary.
 
 Overlay merge is **by rule ID**, with three operations:
 
@@ -318,7 +338,7 @@ the effective ruleset with each rule's originating layer.
 
 ## Compilation and runtime behavior
 
-`rules.Compile()` runs **once at process startup** (gitleaks lineage):
+`rules.Compile()` runs **once at process startup**:
 
 1. Parse every pack in every layer; apply merge semantics.
 2. Validate the entire lint contract above; any violation aborts startup with the offending

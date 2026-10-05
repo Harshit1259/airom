@@ -79,7 +79,7 @@ Conventions used throughout:
 | `Components` | `components[]` *(native)* | `@graph` elements (one per component + shared `CreationInfo`) | `results[]`, **one result per Occurrence**, not per component (§7.3) | `components[]` |
 | `Relationships` | see §3.10: `dependencies[]` / `modelCard…datasets[].ref` / `airom:rel.*` | `Relationship` elements `{from, to[], relationshipType}` | — | `relationships[]` |
 | `Unknowns` | *(lossy)* count only: `metadata.properties[]` `airom:unknowns` | — | `runs[].invocations[].toolExecutionNotifications[]` (§3.11) | `unknowns[]` *(native)* |
-| `Stats` | — | — | — | `stats` *(native; only when `--stats`)* |
+| `Stats` | *(lossy)* the assurance subset only: `airom:assurance.*` (§6.5) | — | — | `stats` *(native)*. The assurance fields (`filesIgnored`, `dirsPruned`, `filesTruncated`, `enrichment`, `confidenceModel`) are always present; the volatile timing and per-detector counters only under `--stats` |
 
 ### 3.2 `Component`: identity and shared fields
 
@@ -219,7 +219,7 @@ evidence.
 
 | Internal (§5) | CycloneDX 1.6 | SPDX 3.0.1 (v2) | SARIF 2.1.0 | Native JSON |
 |---|---|---|---|---|
-| `Field` (`name \| version \| purl \| hash`) | `evidence.identity[].field` *(native: AIROM's four values are a strict subset of the CDX enum `group \| name \| version \| purl \| cpe \| omniborId \| swhid \| swid \| hash`)* | — | — | `evidence.identity[].field` |
+| `Field` (`name \| version \| purl \| hash`) | `evidence.identity[].field` *(native: AIROM's four values are a strict subset of the CDX enum `group \| name \| version \| purl \| cpe \| omniborId \| swhid \| swid \| hash`)* | — | — | `evidence.identity[].field` Claims whose field is NOT in that enum (`versionConstraint`) are **not** emitted here: the enum is closed and a strict consumer rejects a document that invents a value. They travel as `airom:evidence.versionConstraint` (§6.5) instead, so the claim survives the format that has no slot for it. |
 | `Value` | `evidence.identity[].concludedValue` *(native)* | — | — | `evidence.identity[].value` |
 | `Confidence` | `evidence.identity[].confidence` *(native; number 0–1, format §6.2)* | — | — | `evidence.identity[].confidence` |
 | `Methods` (`[]DetectionMethod`) | `evidence.identity[].methods[]`. One entry per method: `{technique: <§5 table>, confidence: <the claim's confidence>}`; `config-analysis` additionally sets `methods[].value: "config-analysis"` (§5 recovery marker) | — | — | `evidence.identity[].methods[]` |
@@ -284,6 +284,7 @@ EOL, and test-scope overlays). Their homes are normative here, same as everythin
 | `VersionConstraint` (declared range) | `properties[]` `airom:version.constraint` *(prop)*; **never** `version`, and no version in the `purl` | element `comment` `airom:versionConstraint <range>`; **never** `software_packageVersion` on a class where that field is required it is `NOASSERTION` and the range goes to the comment | — | — | `versionConstraint` |
 | `TestOnly` | `scope: "excluded"` *(native)* | element `comment` `airom:testOnly true` *(lossy: SPDX has no scope; stated because a consumer who reads a fixture as a production dependency draws exactly the wrong conclusion)* | — | component hidden from `results[]` unless `--include-tests` | `testOnly` |
 | `Risks[]` (AIROM's own structural findings) | `vulnerabilities[]` with `ratings[].method: "other"` and `source.name: "airom"` | `security_Vulnerability` element + a **plain** `Relationship` `hasAssociatedVulnerability` (package → vulnerability, Core's direction). Deliberately **not** a `security_Vex…` assessment: a risk is suspicion with evidence, never a verdict, and publishing it as a VEX claim turns a lead into an accusation | — *(a VEX document states affectedness, which a structural risk does not assert)* | security results, `level` per severity (§7.1) | `risks[]` |
+| `Vulnerability.KEV` (CISA KEV overlay) | `vulnerabilities[]` `properties[]` `airom:cve.kev.*` *(prop)* — no native slot, see §6.5 | element `comment` *(lossy)* | — *(VEX states affectedness, not exploitation in the wild)* | appended to the result message (`KNOWN EXPLOITED (CISA KEV, added …)`) and `airom:cve.kev*` result properties | `vulnerabilities[].kev` |
 | `Vulnerabilities[]` (CVE overlay) | `vulnerabilities[]` with a real CVSSv3 `ratings[]` | `security_Vulnerability` element + `security_VexAffectedVulnAssessmentRelationship` (vulnerability → package; the security profile **inverts** Core's direction for assessment subclasses). Status is always affected; `Fixed` becomes `security_actionStatement`, never a `fixed` assessment | one `statements[]` entry, `status: "affected"`; `Fixed` → `action_statement` | security results | `vulnerabilities[]` |
 | `EOL` (`*Lifecycle`) | `properties[]` `airom:eol.{state, shutdownDate, announcedDate, daysRemaining, replacement, replacementState, source, sourceUrl, verified}` *(prop)* | `validUntilTime` = `Shutdown` at `T00:00:00Z` (Core's "do not use after" instant is exactly a provider shutdown date) + element `comment` carrying state, replacement, and the source URL | — | `result.properties["airom:eol.state"]` *(prop)* | `eol` |
 | `Licenses[]` | `licenses[]` (§3.2) | `simplelicensing_LicenseExpression` element + `hasDeclaredLicense` relationship; one element per distinct expression, shared by every package that declares it | — | — | `licenses[]` |
@@ -435,6 +436,12 @@ and meaningful (multi-edge `airom:rel.*`, repeated `airom:param.*`).
 | `airom:source.git.remote` / `airom:source.git.commit` / `airom:source.git.dirty` | git provenance; dirty is `"true"`/`"false"` |
 | `airom:source.k8s.context` | kube context, k8s scans only |
 | `airom:unknowns` | count of `Unknown` records (lossy CDX marker; full records in native/SARIF) |
+| `airom:assurance.filesIgnored` / `airom:assurance.dirsPruned` | walk exclusions (nonzero only): files the ignore rules excluded, and directories excluded whole, whose contents were never enumerated |
+| `airom:assurance.filesTruncated` | files whose content read stopped at `--max-file-size` (nonzero only): detectors saw a prefix, not the file |
+| `airom:assurance.cve.enabled` / `airom:assurance.cve.unchecked` | whether the CVE overlay ran, and how many components it could not check; `enabled=true` with no `unchecked` means every eligible component was checked |
+| `airom:assurance.cve.kevCatalog` / `airom:assurance.cve.kevListed` | which CISA Known Exploited Vulnerabilities catalog answered (`builtin` or a bundle version) and how many advisories it marked. This is what makes a **missing** `Vulnerability.KEV` readable: with a catalog named it means CISA does not list that CVE; with none it means nobody looked |
+| `airom:assurance.eol.enabled` | whether the model-lifecycle overlay ran (catalog identity in `airom:eol.catalog`) |
+| `airom:assurance.confidenceModel` | the scoring scheme behind every confidence value (`evidence-weighted/1; not empirically calibrated`) — the document says what its numbers mean |
 
 **Component scope (CDX `components[].properties[]`, and SARIF `result.properties` where §3 says so):**
 
@@ -452,10 +459,13 @@ and meaningful (multi-edge `airom:rel.*`, repeated `airom:param.*`).
 | `airom:rel.<type>` | edge-owning (From) component | `"<to-bom-ref>@<confidence>"`. Non-dependency edges (§3.10) |
 | `airom:conflict.<field>` | merge-demoted components | `\|`-joined conflicting Known values when a facet-field conflict demotes to Unknown (§9.2), e.g. `airom:conflict.paramCount` = `"8030261248\|8000000000"` |
 | `airom:pickle.risk` / `airom:pickle.imports` | torch/pickle components | risk summary level; `\|`-joined suspicious `GLOBAL` imports (§3.3) |
+| `airom:cve.fixedVersion` | `vulnerabilities[]` entry, Fixed set | the first fixed version the advisory names |
+| `airom:cve.kev.source` / `airom:cve.kev.added` / `airom:cve.kev.due` / `airom:cve.kev.knownRansomwareUse` | `vulnerabilities[]` entry listed in CISA KEV | the catalog id (`cisa-kev`), the date CISA added it, the BOD 22-01 remediation deadline when set, and `"true"` when CISA records ransomware use. CycloneDX has no native slot for exploitation status — `analysis` describes the publisher's response, not CISA's observation — and the record is deliberately **not** folded into `ratings[]`: KEV is not a score, and raising severity to signal it would publish a number nobody assigned |
 | `airom:releaseTime` | any component, ReleaseTime Known | RFC 3339 (§3.2) |
 | `airom:dataset.*` | `dataset` / `prompt` components | enumerated keys in §3.5: `types`, `size`, `usesSensitivePII`, `collectionProcess`, `intendedUse`, `knownBias`, `preprocessing`, `anonymization`, `availability`, `noise`, `updateMechanism`, `builtTime` |
 | `airom:service.endpoint` | `service` / `infra` components | endpoint URL |
 | `airom:infra.*`, `airom:package.*` | reserved prefixes | individual keys registered here when `InfraFacet` / `PackageFacet` enumerations land (§3.6) |
+| `airom:evidence.versionConstraint` | a declared range recorded as an identity CLAIM, when `evidence.identity[]` cannot carry it (its `field` enum is closed). Repeated when sightings disagree |
 
 **SARIF-only keys (never in CDX):**
 

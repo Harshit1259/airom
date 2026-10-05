@@ -190,18 +190,35 @@ var pypiCatalog = catalog{
 		"mistralai":             {kLibrary, provMistral, ""},
 		"groq":                  {kLibrary, provGroq, ""},
 		"voyageai":              {kLibrary, provVoyage, ""},
-		"instructor":            {kLibrary, "", ""},
-		"litellm":               {kLibrary, "", ""},
-		"chromadb":              {kVectorDB, provChroma, ""},
-		"pinecone-client":       {kVectorDB, provPinecone, ""},
-		"qdrant-client":         {kVectorDB, provQdrant, ""},
-		"weaviate-client":       {kVectorDB, provWeaviate, ""},
-		"faiss-cpu":             {kVectorDB, provMeta, ""},
-		"faiss-gpu":             {kVectorDB, provMeta, ""},
-		"pymilvus":              {kVectorDB, provMilvus, ""},
-		"redis":                 {kVectorDB, "Redis", ""},
-		"deeplake":              {kVectorDB, "activeloop", ""},
-		"pgvector":              {kVectorDB, "pgvector", ""},
+		// Self-named vendors, like crewai and dspy above: the project is the
+		// provider. Both were provider-less here while their rule packs named
+		// one, so a manifest pin and a code sighting of the same library did
+		// not fold — CanonicalKey includes Provider — and an AIBOM listed
+		// litellm twice, once with a version and once without.
+		"instructor":      {kLibrary, "instructor", ""},
+		"litellm":         {kLibrary, "litellm", ""},
+		"chromadb":        {kVectorDB, provChroma, ""},
+		"pinecone-client": {kVectorDB, provPinecone, ""},
+		"qdrant-client":   {kVectorDB, provQdrant, ""},
+		"weaviate-client": {kVectorDB, provWeaviate, ""},
+		"faiss-cpu":       {kVectorDB, provMeta, ""},
+		"faiss-gpu":       {kVectorDB, provMeta, ""},
+		"pymilvus":        {kVectorDB, provMilvus, ""},
+		// redis is deliberately ABSENT. It is a dual-use datastore: the pip
+		// package is a cache/broker/queue client, and it is a vector store
+		// only with Redis Stack's vector-search API. A bare dependency line
+		// does not establish which, so claiming vector-db from it asserted
+		// what nothing showed — real-world proof: Flask's own celery example
+		// pins redis==4.5.4 and was reported as a vector database at 0.95
+		// confidence (airom-bench r-flask).
+		//
+		// Same treatment elasticsearch and mongodb already get: the vector
+		// claim lives in rules/vectordb/redis-vector.yaml, which fires on
+		// actual vector usage (VectorField, FT.CREATE) and claims the same
+		// name and provider, so a genuine RAG stack is still detected — with
+		// evidence behind it.
+		"deeplake": {kVectorDB, "activeloop", ""},
+		"pgvector": {kVectorDB, "pgvector", ""},
 	},
 	prefixes: []prefixRule{
 		{"langchain-", aiPkg{kFramework, provLangChain, ""}},
@@ -286,9 +303,12 @@ var cargoCatalog = catalog{
 // restores the conventional casing.
 var nugetCatalog = catalog{
 	exact: map[string]aiPkg{
-		"azure.ai.openai":          {kLibrary, provMicrosoft, "Azure.AI.OpenAI"},
-		"openai":                   {kLibrary, provOpenAI, "OpenAI"},
-		"microsoft.semantickernel": {kFramework, provMicrosoft, "Microsoft.SemanticKernel"},
+		"azure.ai.openai": {kLibrary, provMicrosoft, "Azure.AI.OpenAI"},
+		"openai":          {kLibrary, provOpenAI, "OpenAI"},
+		// Display name folds with the rule pack's claim ("semantic-kernel");
+		// the declared NuGet identity travels in the purl. Split-brain found
+		// by airom-bench Tier S.
+		"microsoft.semantickernel": {kFramework, provMicrosoft, "semantic-kernel"},
 		"langchain":                {kFramework, provLangChain, "LangChain"},
 		"betalgo.openai":           {kLibrary, provOpenAI, "Betalgo.OpenAI"},
 		"pinecone.net":             {kVectorDB, provPinecone, "Pinecone.NET"},
@@ -302,6 +322,11 @@ func mavenLookup(group, artifact string) (aiPkg, bool) {
 	switch {
 	case group == "dev.langchain4j":
 		return aiPkg{kFramework, provLangChain, ""}, true
+	case group == "com.aallam.openai":
+		// The de facto Kotlin OpenAI SDK (openai-client, openai-core).
+		// Absence found by airom-bench Tier S: a build.gradle.kts declaring
+		// it produced zero components (airomhq/airom#17).
+		return aiPkg{kLibrary, provOpenAI, ""}, true
 	case strings.HasPrefix(group, "com.theokanning.openai-gpt3-java"):
 		return aiPkg{kLibrary, provOpenAI, ""}, true
 	case group == "io.milvus" && artifact == "milvus-sdk-java":

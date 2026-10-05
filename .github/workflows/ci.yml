@@ -14,6 +14,11 @@ concurrency:
   cancel-in-progress: true
 
 env:
+  # A minor line, resolved to its newest patch at run time: every setup-go step
+  # in every workflow sets check-latest. Without it, setup-go takes whatever
+  # 1.26.x the runner image has cached — v0.4.4 (2026-08-24) was built on
+  # go1.26.6 five days after go1.26.7 shipped. Standard-library security fixes
+  # arrive only as Go patch releases, and Dependabot never proposes those.
   GO_VERSION: "1.26"
 
 jobs:
@@ -25,6 +30,7 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
+          check-latest: true
           cache: true
       - name: gofmt
         run: |
@@ -42,7 +48,13 @@ jobs:
           # release that bumps it changes what counts as "formatted" and turns
           # an unrelated commit red. Bump this deliberately, with the reformat
           # in the same commit.
-          version: v2.12.2
+          #
+          # v2.13.2 is also the floor for working on a Go 1.27 machine: v2.12.2
+          # was built with go1.26.2, and its type-checker rejects 1.27's
+          # math/rand/v2 outright, so `make lint` fails before it reaches our
+          # code. v2.13.2 is clean on both 1.26.8 (what this job runs) and
+          # 1.27.1, with no reformat in either direction.
+          version: v2.13.2
           # The .golangci.yml depguard rules enforce the §4 import-direction law.
 
   generate:
@@ -53,6 +65,7 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
+          check-latest: true
           cache: true
       - name: go generate
         run: go generate ./...
@@ -71,6 +84,7 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
+          check-latest: true
           cache: true
       # The P2 memory gates skip themselves under -race and are enforced by the
       # `perf` job below instead; -race legitimately makes heap accounting
@@ -89,6 +103,7 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
+          check-latest: true
           cache: true
       # Proves invariant P2: peak heap is a function of configuration, not
       # input size. This job is the ONLY place those assertions actually
@@ -116,6 +131,7 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
+          check-latest: true
           cache: true
       # Proves invariant P8: the release binary builds statically for every
       # target with no CGO. A regression that reintroduces a C dependency
@@ -139,6 +155,7 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
+          check-latest: true
           cache: true
       - uses: actions/setup-python@v7
         with:
@@ -194,6 +211,71 @@ jobs:
           "$VENV/bin/python" -m pip install --quiet --no-index --find-links dist "airom==$VERSION"
           python ../../.github/scripts/smoke_wheel.py "$VENV/bin" "$VERSION"
 
+  bench:
+    name: Benchmark
+    # Detection quality, measured against the labeled corpus rather than
+    # asserted. Runs on every push and PR — there is no path filter, because
+    # the changes that move these numbers are not reliably the ones that
+    # look like they would.
+    #
+    # ENFORCING since v0.4.5, after the two report-only cycles §5 requires
+    # (v0.4.4 and v0.4.5). A regression now fails the job. Two things hold
+    # the gate shut, and removing either re-opens it silently:
+    #
+    #   1. No continue-on-error on this job.
+    #   2. The `1)` branch below exits 1. Without it the case statement ends
+    #      on a successful echo, so the step passes and deleting
+    #      continue-on-error alone would have changed nothing.
+    #
+    # At 31 labels a single new error moves precision ~3pt, well past the
+    # 1pt threshold, so in practice this gates on "no new mistakes". That is
+    # the intent while the corpus is small; it also means a genuine
+    # improvement needs its baseline updated in the same PR (§5).
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: true
+          cache: true
+      # The corpus is a separate repository on purpose: it is data, it is
+      # held out from this repo's fixtures, and pinning it here keeps a
+      # corpus edit from silently changing this repo's numbers.
+      #
+      # The pin was the claim this comment made while `ref` was absent and
+      # the job took airom-bench@HEAD. That was survivable report-only; with
+      # the gate enforcing, an edit in a repo with its own cadence could turn
+      # this repo's main red. Bump this SHA deliberately, in a commit that
+      # says what the corpus change did to the numbers.
+      - name: Fetch the corpus
+        uses: actions/checkout@v7
+        with:
+          repository: airomhq/airom-bench
+          ref: 93f1a230b119999190c98a6e9b9a55ea7f199769 # baselines: v0.4.3, the first one
+          path: .bench-corpus
+      - name: Measure
+        run: |
+          go build -o /tmp/airom ./cmd/airom
+          base=$(ls .bench-corpus/baselines/v*.json 2>/dev/null | sort -V | tail -1)
+          if [ -z "$base" ]; then
+            echo "::notice::no baseline in the corpus yet; reporting numbers only"
+            /tmp/airom bench .bench-corpus | tee "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          echo "baseline: $base"
+          set +e
+          /tmp/airom bench .bench-corpus --baseline "$base" > report.md 2> gate.txt
+          code=$?
+          set -e
+          cat report.md | tee "$GITHUB_STEP_SUMMARY"
+          { echo; echo '### Gate'; echo '```'; cat gate.txt; echo '```'; } >> "$GITHUB_STEP_SUMMARY"
+          case $code in
+            0) echo "::notice::benchmark gate passed against $base" ;;
+            1) echo "::error::benchmark REGRESSION against $base (see summary)"; exit 1 ;;
+            *) echo "::error::benchmark could not run (exit $code)"; exit $code ;;
+          esac
+
   fuzz:
     name: Fuzz smoke
     runs-on: ubuntu-latest
@@ -202,6 +284,7 @@ jobs:
       - uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
+          check-latest: true
           cache: true
       # Short burst of every Fuzz* target (binary parsers eat untrusted
       # bytes, §13). Regression seeds are each target's in-code f.Add values,

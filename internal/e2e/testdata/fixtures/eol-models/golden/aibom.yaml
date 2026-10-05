@@ -4,7 +4,7 @@ components:
       source: airom-catalog
       sourceUrl: https://platform.claude.com/docs/en/docs/about-claude/model-deprecations
       state: supported
-      verified: "2026-07-23"
+      verified: "2026-09-28"
     evidence:
       occurrences:
         - confidence: 0.85
@@ -41,21 +41,19 @@ components:
           value: "64"
     name: claude-sonnet-4-6
     props:
-      - name: airom:model.provider
-        value: anthropic
       - name: airom:model.id
         value: claude-sonnet-4-6
     provider: anthropic
   - confidence: 0.85
     eol:
       announced: "2026-04-22"
-      daysRemaining: 83
+      daysRemaining: 24
       replacement: gpt-5.6-sol
       shutdown: "2026-10-23"
       source: airom-catalog
       sourceUrl: https://developers.openai.com/api/docs/deprecations
       state: deprecated
-      verified: "2026-07-23"
+      verified: "2026-09-28"
     evidence:
       occurrences:
         - confidence: 0.85
@@ -74,8 +72,6 @@ components:
     kind: hosted-llm
     name: gpt-4-turbo
     props:
-      - name: airom:model.provider
-        value: openai
       - name: airom:model.id
         value: gpt-4-turbo
     provider: openai
@@ -129,47 +125,17 @@ components:
     provider: anthropic
     purl: pkg:pypi/anthropic@0.39.0
     version: 0.39.0
-  - confidence: 0.525
-    evidence:
-      occurrences:
-        - confidence: 0.5
-          detectorId: rules/aiconfig/token-limits
-          fields:
-            param: max_tokens
-          location:
-            column: 1
-            endColumn: 17
-            endLine: 40
-            line: 40
-            path: app.py
-          method: source-code-analysis
-          snippet: max_tokens=64,
-        - confidence: 0.5
-          detectorId: rules/aiconfig/token-limits
-          fields:
-            param: max_tokens
-          location:
-            column: 1
-            endColumn: 17
-            endLine: 46
-            line: 46
-            path: app.py
-          method: source-code-analysis
-          snippet: max_tokens=64,
-    id: airom:737f185ea7c9f67f
-    kind: ai-config
-    name: max_tokens
   - confidence: 0.85
     eol:
       announced: "2026-06-05"
-      daysRemaining: 4
+      daysRemaining: -55
       replacement: claude-opus-4-8
       replacementState: supported
       shutdown: "2026-08-05"
       source: airom-catalog
       sourceUrl: https://platform.claude.com/docs/en/docs/about-claude/model-deprecations
-      state: deprecated
-      verified: "2026-07-23"
+      state: retired
+      verified: "2026-09-28"
     evidence:
       occurrences:
         - confidence: 0.85
@@ -206,8 +172,6 @@ components:
           value: "64"
     name: claude-opus-4-1-20250805
     props:
-      - name: airom:model.provider
-        value: anthropic
       - name: airom:model.id
         value: claude-opus-4-1-20250805
     provider: anthropic
@@ -248,8 +212,6 @@ components:
           value: "64"
     name: gpt-4o
     props:
-      - name: airom:model.provider
-        value: openai
       - name: airom:model.id
         value: gpt-4o
     provider: openai
@@ -322,13 +284,13 @@ components:
   - confidence: 0.85
     eol:
       announced: "2024-06-06"
-      daysRemaining: -421
+      daysRemaining: -480
       replacement: gpt-4o
       shutdown: "2025-06-06"
       source: airom-catalog
       sourceUrl: https://developers.openai.com/api/docs/deprecations
       state: retired
-      verified: "2026-07-23"
+      verified: "2026-09-28"
     evidence:
       occurrences:
         - confidence: 0.85
@@ -347,8 +309,6 @@ components:
     kind: hosted-llm
     name: gpt-4-32k
     props:
-      - name: airom:model.provider
-        value: openai
       - name: airom:model.id
         value: gpt-4-32k
     provider: openai
@@ -449,6 +409,7 @@ source:
   kind: dir
   target: eol-models
 stats:
+  confidenceModel: evidence-weighted/1; not empirically calibrated
   contentBytes: 1558
   detectors:
     - findings: 0
@@ -591,7 +552,14 @@ stats:
       id: ruleengine
       invocations: 1
       ns: 0
+  dirsPruned: 1
   durationNs: 0
+  enrichment:
+    cve:
+      enabled: false
+    eol:
+      catalogLoaded: true
+      enabled: true
   filesFailed: 0
   filesProcessed: 2
   filesWalked: 2
@@ -632,7 +600,7 @@ stats:
     - 'project/raglink: selected by "default"'
     - 'prompt/file: selected by "default"'
     - 'ruleengine: selected by "default"'
-timestamp: "2026-08-01T12:00:00Z"
+timestamp: "2026-09-29T12:00:00Z"
 tool:
   eolCatalog: builtin
   name: airom

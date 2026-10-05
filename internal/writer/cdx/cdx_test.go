@@ -726,3 +726,41 @@ func hasExtRef(refs *[]cyclonedx.ExternalReference, typ cyclonedx.ExternalRefere
 	}
 	return false
 }
+
+// TestNoDuplicateProperties: CycloneDX allows a property name to repeat, and
+// this document relies on that for genuinely multi-valued facts (airom:rel.*,
+// airom:param.*, competing airom:evidence.versionConstraint entries). What it
+// must never emit is the same name with the same value twice — that is not a
+// multi-valued fact, it is one fact recorded by two code paths, which is how
+// airom:model.provider ended up in every hosted-model component twice: the
+// assembler wrote it into Props while the writer already projected it from the
+// typed Provider field.
+func TestNoDuplicateProperties(t *testing.T) {
+	var doc struct {
+		Components []struct {
+			Name       string `json:"name"`
+			Properties []struct {
+				Name  string `json:"name"`
+				Value string `json:"value"`
+			} `json:"properties"`
+		} `json:"components"`
+	}
+	if err := json.Unmarshal(encode(t, writer.Options{}), &doc); err != nil {
+		t.Fatal(err)
+	}
+	if len(doc.Components) == 0 {
+		t.Fatal("no components in the document")
+	}
+	for _, c := range doc.Components {
+		seen := map[[2]string]int{}
+		for _, p := range c.Properties {
+			seen[[2]string{p.Name, p.Value}]++
+		}
+		for k, n := range seen {
+			if n > 1 {
+				t.Errorf("component %q emits property %q=%q %d times; identical pairs carry no information",
+					c.Name, k[0], k[1], n)
+			}
+		}
+	}
+}

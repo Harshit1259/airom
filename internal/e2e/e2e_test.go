@@ -50,7 +50,7 @@ var update = flag.Bool("update", false, "regenerate golden files")
 // dates against it, so it is pinned AFTER the lifecycle catalog's `verified`
 // date. A scan day earlier than that would mean the catalog knows things the
 // scan date does not — an inconsistency the overlay reports rather than hides.
-var fixedTimestamp = time.Date(2026, 8, 1, 12, 0, 0, 0, time.UTC)
+var fixedTimestamp = time.Date(2026, 9, 29, 12, 0, 0, 0, time.UTC)
 
 const fixedSerial = "urn:uuid:00000000-0000-4000-8000-000000000000"
 
@@ -272,7 +272,7 @@ func TestScanChaosDegradation(t *testing.T) {
 	// Valid components in the same tree are still found: the well-formed GGUF
 	// weight file and the langchain manifest entry.
 	names := componentNames(inv)
-	for _, want := range []string{"tiny.gguf", "langchain"} {
+	for _, want := range []string{"tiny", "langchain"} {
 		if !names[want] {
 			t.Errorf("valid component %q was dropped; found: %v", want, sortedKeys(names))
 		}

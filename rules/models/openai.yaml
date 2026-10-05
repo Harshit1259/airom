@@ -1,4 +1,4 @@
-# rules/models/openai.yaml — OpenAI hosted chat models (one file per provider).
+# rules/models/openai.yaml — OpenAI hosted models (one file per provider).
 # Embedding models (text-embedding-*) live in rules/embeddings/openai.yaml by design.
 pack: openai
 version: 1
@@ -9,7 +9,40 @@ rules:
     provider: openai
     languages: [python, javascript, typescript, go, java, rust, csharp, kotlin]
     keywords: ["gpt-", "chatgpt-", "o1", "o3", "o4"]
-    pattern: '\b(?i:[a-z0-9_]*model[a-z0-9_]*)["'']?\s*[:=]\s*["''](?P<model>(?:gpt-|chatgpt-)[\w.\-]*\w|o[134](?:[.-][\w.\-]*\w)?)["'']'
+    pattern: '\b(?i:[a-z0-9_]*model[a-z0-9_]*)["'']?\s*(?:[:=]|\()\s*["''](?P<model>(?:gpt-|chatgpt-)[\w.\-]*\w|o[134](?:[.-][\w.\-]*\w)?)["'']'
+    regions: [code, string]
+    claim: { name: "${model}" }
+    confidence: 0.85
+
+  # Non-chat hosted model ids: image, video, speech, moderation, computer-use,
+  # and the legacy completion bases. Separate from openai/model-literal above so
+  # that rule's alternation — hardened against a model-shaped KEY carrying a
+  # non-model VALUE ("command-line", "o365", "buy-instant") — is not reopened to
+  # add families, and so a SARIF suppression for chat ids does not silently
+  # cover these too.
+  #
+  # Why it exists: the lifecycle catalog has always carried dall-e-2/3, sora-2,
+  # whisper-1, text-moderation-*, computer-use-preview, codex-mini-latest and
+  # the babbage/davinci bases, and NO rule matched any of them — 17 records that
+  # could never fire. AIROM saw none of OpenAI's non-text surface at all.
+  #
+  # `kind: hosted-llm` is the honest compromise, not a claim that DALL·E is a
+  # language model: it is the only kind meaning "hosted model whose lifetime the
+  # provider controls", and the only one the EOL overlay considers
+  # (internal/eol.eligible). A modality kind is the real fix and is a v2
+  # decision, not one to smuggle in through a rule pack.
+  #
+  # Each family is anchored tightly, because the near misses are other people's
+  # models: whisper-large-v3 and dall-e-mini are open-weights models that are
+  # NOT OpenAI-hosted, and stamping provider=openai on them would be a wrong
+  # claim where no claim belongs. Requiring a digit after the family prefix
+  # keeps them out while still matching the next version of each line.
+  - id: openai/media-model-literal
+    kind: hosted-llm
+    provider: openai
+    languages: [python, javascript, typescript, go, java, rust, csharp, kotlin]
+    keywords: ["dall-e", "sora-", "whisper-", "babbage-0", "davinci-0", "moderation", "computer-use", "codex-mini"]
+    pattern: '\b(?i:[a-z0-9_]*model[a-z0-9_]*)["'']?\s*(?:[:=]|\()\s*["''](?P<model>dall-e-\d(?:[\w.\-]*\w)?|sora-\d(?:[\w.\-]*\w)?|whisper-\d(?:[\w.\-]*\w)?|(?:babbage|davinci)-\d{3}|(?:text|omni)-moderation(?:-[\w.\-]+)?|computer-use-preview(?:-[\w.\-]+)?|codex-mini(?:-[\w.\-]+)?)["'']'
     regions: [code, string]
     claim: { name: "${model}" }
     confidence: 0.85

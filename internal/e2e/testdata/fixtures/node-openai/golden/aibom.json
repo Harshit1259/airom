@@ -8,7 +8,7 @@
     "eolCatalog": "builtin"
   },
   "serial": "urn:uuid:00000000-0000-4000-8000-000000000000",
-  "timestamp": "2026-08-01T12:00:00Z",
+  "timestamp": "2026-09-29T12:00:00Z",
   "lifecycle": "pre-build",
   "source": {
     "kind": "dir",
@@ -69,40 +69,10 @@
       },
       "props": [
         {
-          "name": "airom:model.provider",
-          "value": "anthropic"
-        },
-        {
           "name": "airom:model.id",
           "value": "claude-sonnet-4-5"
         }
       ]
-    },
-    {
-      "id": "airom:737f185ea7c9f67f",
-      "kind": "ai-config",
-      "name": "max_tokens",
-      "confidence": 0.5,
-      "evidence": {
-        "occurrences": [
-          {
-            "location": {
-              "path": "src/agent.ts",
-              "line": 8,
-              "endLine": 8,
-              "column": 1,
-              "endColumn": 18
-            },
-            "detectorId": "rules/aiconfig/token-limits",
-            "method": "source-code-analysis",
-            "confidence": 0.5,
-            "snippet": "max_tokens: 512,",
-            "fields": {
-              "param": "max_tokens"
-            }
-          }
-        ]
-      }
     },
     {
       "id": "airom:74c94e76beb18249",
@@ -273,6 +243,7 @@
     "filesWalked": 2,
     "filesProcessed": 2,
     "filesFailed": 0,
+    "dirsPruned": 1,
     "headerBytes": 588,
     "contentBytes": 588,
     "durationNs": 0,
@@ -524,6 +495,16 @@
         "findings": 3,
         "ns": 0
       }
-    ]
+    ],
+    "enrichment": {
+      "cve": {
+        "enabled": false
+      },
+      "eol": {
+        "enabled": true,
+        "catalogLoaded": true
+      }
+    },
+    "confidenceModel": "evidence-weighted/1; not empirically calibrated"
   }
 }

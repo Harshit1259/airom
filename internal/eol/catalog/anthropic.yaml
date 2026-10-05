@@ -17,7 +17,7 @@
 provider: anthropic
 version: 1
 source: https://platform.claude.com/docs/en/docs/about-claude/model-deprecations
-verified: 2026-07-23
+verified: 2026-09-28
 models:
   # ── retired: requests to these fail ───────────────────────────────────────
   - id: claude-1.0
@@ -94,11 +94,21 @@ models:
   # published yet, which is legal: announced, date TBA).
   - id: claude-mythos-preview
     state: deprecated
-    announced: 2026-07-23
+    announced: 2026-06-09
     replacement: claude-mythos-5
 
   # ── active ────────────────────────────────────────────────────────────────
+  - id: claude-fable-5-1
+    state: supported
+  - id: claude-mythos-5-1
+    state: supported
   - id: claude-fable-5
+    state: supported
+  # Named as claude-mythos-preview's replacement above, so a scan that found it
+  # was being told nothing about the model it had just been pointed at.
+  - id: claude-mythos-5
+    state: supported
+  - id: claude-opus-5-5
     state: supported
   - id: claude-opus-5
     state: supported

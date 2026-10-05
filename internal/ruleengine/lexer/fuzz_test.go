@@ -29,6 +29,15 @@ func FuzzClassify(f *testing.F) {
 		"br########\"never closed",
 		"'''",
 		`"""`,
+		// SQL: `--` to end of line, `/* */` blocks, `'` strings, and `"` as a
+		// quoted IDENTIFIER that must stay code. These shapes went unfuzzed
+		// while SQL was absent from allLangs.
+		"-- c\nSELECT \"embedding\" FROM t WHERE s = 'a''b'; /* o /* i */ */",
+		"SELECT 'unterminated",
+		`CREATE TABLE t ("col--not-a-comment" vector(1536)); -- real`,
+		"--",
+		"/*",
+		"'a\\' -- still in the string?",
 	}
 	for _, s := range seeds {
 		f.Add([]byte(s))

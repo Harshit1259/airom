@@ -132,7 +132,7 @@ design, §9.4).
 
 Every rule needs **at least one positive and one negative fixture case**, `airom rules
 lint` fails the pack otherwise. Cases are marked with annotations the linter and golden
-driver read (semgrep-style):
+driver read (one pass, one buffer):
 
 - `# airom: <rule-id>`, the next line (or this line, when trailing) **must** produce a
   finding for that rule.

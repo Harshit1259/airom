@@ -8,7 +8,7 @@
     "eolCatalog": "builtin"
   },
   "serial": "urn:uuid:00000000-0000-4000-8000-000000000000",
-  "timestamp": "2026-08-01T12:00:00Z",
+  "timestamp": "2026-09-29T12:00:00Z",
   "lifecycle": "pre-build",
   "source": {
     "kind": "dir",
@@ -99,10 +99,6 @@
         ]
       },
       "props": [
-        {
-          "name": "airom:model.provider",
-          "value": "openai"
-        },
         {
           "name": "airom:model.id",
           "value": "gpt-4o-mini"
@@ -248,6 +244,7 @@
     "filesWalked": 6,
     "filesProcessed": 6,
     "filesFailed": 0,
+    "dirsPruned": 1,
     "headerBytes": 1997,
     "contentBytes": 1735,
     "durationNs": 0,
@@ -499,6 +496,16 @@
         "findings": 4,
         "ns": 0
       }
-    ]
+    ],
+    "enrichment": {
+      "cve": {
+        "enabled": false
+      },
+      "eol": {
+        "enabled": true,
+        "catalogLoaded": true
+      }
+    },
+    "confidenceModel": "evidence-weighted/1; not empirically calibrated"
   }
 }

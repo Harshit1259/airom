@@ -2,14 +2,14 @@ components:
   - confidence: 0.85
     eol:
       announced: "2024-09-04"
-      daysRemaining: -633
+      daysRemaining: -692
       replacement: claude-haiku-4-5-20251001
       replacementState: supported
       shutdown: "2024-11-06"
       source: airom-catalog
       sourceUrl: https://platform.claude.com/docs/en/docs/about-claude/model-deprecations
       state: retired
-      verified: "2026-07-23"
+      verified: "2026-09-28"
     evidence:
       occurrences:
         - confidence: 0.85
@@ -46,8 +46,6 @@ components:
           value: "1"
     name: claude-1.0
     props:
-      - name: airom:model.provider
-        value: anthropic
       - name: airom:model.id
         value: claude-1.0
     provider: anthropic
@@ -138,8 +136,6 @@ components:
           value: "1"
     name: gpt-4o-mini
     props:
-      - name: airom:model.provider
-        value: openai
       - name: airom:model.id
         value: gpt-4o-mini
     provider: openai
@@ -162,8 +158,6 @@ components:
     kind: hosted-llm
     name: gpt-4o
     props:
-      - name: airom:model.provider
-        value: openai
       - name: airom:model.id
         value: gpt-4o
     provider: openai
@@ -243,13 +237,13 @@ components:
   - confidence: 0.85
     eol:
       announced: "2024-06-06"
-      daysRemaining: -421
+      daysRemaining: -480
       replacement: gpt-4o
       shutdown: "2025-06-06"
       source: airom-catalog
       sourceUrl: https://developers.openai.com/api/docs/deprecations
       state: retired
-      verified: "2026-07-23"
+      verified: "2026-09-28"
     evidence:
       occurrences:
         - confidence: 0.85
@@ -268,8 +262,6 @@ components:
     kind: hosted-llm
     name: gpt-4-32k
     props:
-      - name: airom:model.provider
-        value: openai
       - name: airom:model.id
         value: gpt-4-32k
     provider: openai
@@ -370,6 +362,7 @@ source:
   kind: dir
   target: test-scoped
 stats:
+  confidenceModel: evidence-weighted/1; not empirically calibrated
   contentBytes: 1522
   detectors:
     - findings: 0
@@ -512,7 +505,14 @@ stats:
       id: ruleengine
       invocations: 3
       ns: 0
+  dirsPruned: 1
   durationNs: 0
+  enrichment:
+    cve:
+      enabled: false
+    eol:
+      catalogLoaded: true
+      enabled: true
   filesFailed: 0
   filesProcessed: 4
   filesWalked: 4
@@ -553,7 +553,7 @@ stats:
     - 'project/raglink: selected by "default"'
     - 'prompt/file: selected by "default"'
     - 'ruleengine: selected by "default"'
-timestamp: "2026-08-01T12:00:00Z"
+timestamp: "2026-09-29T12:00:00Z"
 tool:
   eolCatalog: builtin
   name: airom

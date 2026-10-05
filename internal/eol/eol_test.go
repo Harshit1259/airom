@@ -15,7 +15,7 @@ func day(y int, m time.Month, d int) airom.Date {
 
 // scanDay is the fixed "now" every test reasons from, so results never drift
 // with the wall clock.
-var scanDay = day(2026, time.July, 23)
+var scanDay = day(2026, time.September, 28)
 
 // TestEmbeddedCatalogLoads is the build-integrity check: the shipped catalog
 // must parse and satisfy the full validation contract, since a malformed one
@@ -463,5 +463,107 @@ func TestEnrichNilSafe(t *testing.T) {
 	var nilCat *Catalog
 	if nilCat.Lookup("openai", "gpt-4", scanDay) != nil || nilCat.Size() != 0 || nilCat.StalenessWarning(scanDay) != "" {
 		t.Error("nil catalog methods must be safe")
+	}
+}
+
+// hostedModel builds one hosted-llm component the way the assembler would: the
+// model LINE as the name, and a date-shaped snapshot in the version.
+func hostedModel(name, provider, version string) airom.Component {
+	c := airom.Component{
+		ID: "airom:snap", Kind: airom.KindHostedLLM, Name: name,
+		Provider: airom.KnownString(provider),
+	}
+	if version != "" {
+		c.Version = airom.KnownString(version)
+	}
+	return c
+}
+
+// TestSnapshotVersionResolvesToItsOwnRecord is the regression test for a
+// lifecycle claim that silently went missing.
+//
+// The assembler splits "gpt-5-2025-08-07" into name "gpt-5" + version
+// "2025-08-07" so a pinned snapshot and the floating alias are one component.
+// The lookup keyed on the name alone, so it asked the catalog about "gpt-5" —
+// a record that does not exist — and returned nothing, while the catalog held
+// gpt-5-2025-08-07 with an announced shutdown of 2026-12-11. Pinning a dated
+// snapshot is the practice providers recommend, and those are precisely the
+// ids that carry a shutdown date, so the models most at risk were the ones
+// reporting no risk.
+func TestSnapshotVersionResolvesToItsOwnRecord(t *testing.T) {
+	c, err := LoadOn(scanDay)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct{ name, version, wantShutdown string }{
+		{"gpt-5", "2025-08-07", "2026-12-11"},
+		{"gpt-4o", "2024-05-13", "2026-10-23"},
+		{"o3", "2025-04-16", "2026-12-11"},
+	} {
+		t.Run(tc.name+"-"+tc.version, func(t *testing.T) {
+			inv := &airom.Inventory{Components: []airom.Component{hostedModel(tc.name, "openai", tc.version)}}
+			if n := Enrich(inv, c, scanDay); n != 1 {
+				t.Fatalf("matched %d components, want 1 — the snapshot record was not reached", n)
+			}
+			lc := inv.Components[0].EOL
+			if lc == nil {
+				t.Fatal("no lifecycle claim for a snapshot the catalog covers")
+			}
+			if got := lc.Shutdown.String(); got != tc.wantShutdown {
+				t.Errorf("shutdown = %s, want %s", got, tc.wantShutdown)
+			}
+		})
+	}
+}
+
+// TestSnapshotBeatsTheModelLine: when the catalog covers BOTH a snapshot and
+// its line, the snapshot's dates win, because they are the specific truth.
+// Real data makes the point — gpt-4o-mini-transcribe retires 2027-02-26, while
+// the 2025-03-20 snapshot of it retires a month earlier.
+func TestSnapshotBeatsTheModelLine(t *testing.T) {
+	c, err := LoadOn(scanDay)
+	if err != nil {
+		t.Fatal(err)
+	}
+	line := c.Lookup("openai", "gpt-4o-mini-transcribe", scanDay)
+	if line == nil {
+		t.Fatal("precondition: the catalog must cover the gpt-4o-mini-transcribe line")
+	}
+	inv := &airom.Inventory{Components: []airom.Component{
+		hostedModel("gpt-4o-mini-transcribe", "openai", "2025-03-20"),
+	}}
+	if n := Enrich(inv, c, scanDay); n != 1 {
+		t.Fatalf("matched %d, want 1", n)
+	}
+	lc := inv.Components[0].EOL
+	if lc == nil {
+		t.Fatal("no lifecycle claim")
+	}
+	if got, want := lc.Shutdown.String(), "2027-01-20"; got != want {
+		t.Errorf("shutdown = %s, want %s (the snapshot's own date)", got, want)
+	}
+	if lc.Shutdown.String() == line.Shutdown.String() {
+		t.Errorf("snapshot resolved to the LINE's date %s; the specific record must win", line.Shutdown.String())
+	}
+}
+
+// TestNonDateVersionIsNotGluedOntoTheName: only a YYYY-MM-DD version is a
+// snapshot suffix. Any other version is a real version, and concatenating it
+// would invent a model id no provider ever published — then miss, and in the
+// worst case hit some unrelated record.
+func TestNonDateVersionIsNotGluedOntoTheName(t *testing.T) {
+	c, err := LoadOn(scanDay)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, v := range []string{"1.2.3", "2026-13-45", "2026-08", "latest", "20260807"} {
+		inv := &airom.Inventory{Components: []airom.Component{hostedModel("gpt-4", "openai", v)}}
+		if n := Enrich(inv, c, scanDay); n != 1 {
+			t.Fatalf("version %q: matched %d, want 1 (the line record still applies)", v, n)
+		}
+		lc := inv.Components[0].EOL
+		if lc == nil || lc.Shutdown.String() != "2026-10-23" {
+			t.Errorf("version %q: got %+v, want gpt-4's own shutdown 2026-10-23", v, lc)
+		}
 	}
 }

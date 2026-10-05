@@ -1,12 +1,12 @@
-# Project status and positioning
+# Project status
 
-The honest ledger of what AIROM does today, what it deliberately does not do,
-and how it compares to adjacent tools. Kept here rather than in the README so
-the front page stays short.
+The honest ledger of what AIROM does today, what it deliberately does not do yet,
+and what it is for. Kept here rather than in the README so the front page stays
+short.
 
 ## Project status
 
-AIROM is at **v0.4.0**: feature-complete against the 10-phase plan, architecture through a multi-agent production review, with three overlays (artifact risk, CVE, model lifecycle), compliance mapping, test-scope filtering, per-PR AIBOM diffing, lockfile and installed-metadata version resolution, PyInstaller archive reading, SQL/DDL scanning, SPDX 3.0.1 and OpenVEX export, one-click CVE remediation with resolver verification, and a signed rule-update channel, now checked automatically once a day outside CI. Early software; expect rough edges, and see the deferred row below for what it deliberately does not do yet. Honest ledger:
+AIROM is at **v0.4.7**: feature-complete against the 10-phase plan, architecture through a multi-agent production review, with three overlays (artifact risk, CVE, model lifecycle), compliance mapping, test-scope filtering, per-PR AIBOM diffing, lockfile and installed-metadata version resolution, PyInstaller archive reading, SQL/DDL scanning, SPDX 3.0.1 and OpenVEX export, one-click CVE remediation with resolver verification, a per-scan assurance account, a public benchmark corpus, and a signed rule-update channel, now checked automatically once a day outside CI. Early software; expect rough edges, and see the deferred row below for what it deliberately does not do yet. Honest ledger:
 
 | Area | Status |
 |---|---|
@@ -14,15 +14,16 @@ AIROM is at **v0.4.0**: feature-complete against the 10-phase plan, architecture
 | Repository scaffolding on the §4 layout (packages and their contracts, build files, docs) | **Complete** |
 | CLI ([docs/cli.md](./cli.md)): scan/fs/repo/image/k8s/clean/version, config layering (flags > env > file > defaults), exit-code contract, `--fail-on` grammar, pprof/trace bootstrap | **Complete**, plus grouped/styled help and a live scan progress indicator that degrades to nothing off a terminal |
 | Filesystem scanner: dir source (nested `.gitignore`/`.airomignore` stack, default skips, symlink safety), classification (language/binary/magic), read-once tee-hashed file context, phase-1 streaming pipeline (bounded channels, clamped I/O budget, panic isolation, deterministic output) | **Complete** |
-| Plugin framework: public SDK (`pkg/airom` domain graph with tri-state fields, `pkg/airom/detect` contracts + dispatch index, `purl` discipline, `detectortest` harness), dispatcher with per-detector isolation and accounting, explicit catalog + Syft-style `--select`, assembler (CanonicalKey identity, keep-and-relate merge, grouped noisy-OR confidence, refusal-first relations), rule-engine compiler (full [rule-schema.md](./rule-schema.md) lint contract, three-layer merge, self-invalidating ruleset hash, Aho–Corasick prefilter, region lexers for all 8 languages), `detectors-gen`, `airom detectors list/explain` | **Complete.** `airom fs . --rules pack.yaml` runs user rule packs end-to-end today |
-| Detectors & rule packs: binary model-file parsers (GGUF, safetensors, ONNX, Torch, SavedModel, TFLite, HDF5, TensorRT, all fuzzed) with an artifact-risk overlay (pickle imports, Keras Lambda, GGUF template gadgets, SavedModel PyFunc → CycloneDX `vulnerabilities[]`/SARIF), 8-ecosystem manifest detectors plus lockfile (npm/yarn/pnpm/poetry/uv/pipenv) and installed-metadata (`.dist-info`/`.egg-info`) version resolution, Go AST detector, prompt/dataset/infra detectors, phase-2 project detectors (HF-dir assembly, adapter lineage, config binding, RAG synthesis), 61 embedded rule packs / 143 rules across 9 categories (incl. a `security` category and a rule-level `risk:` field), `rules list/lint/test` + `dev` scaffolding | **Complete.** Scans a real AI project into a rich AIBOM (models, embeddings, vector DBs, frameworks, weights, prompts, infra, RAG pipelines) |
+| Plugin framework: public SDK (`pkg/airom` domain graph with tri-state fields, `pkg/airom/detect` contracts + dispatch index, `purl` discipline, `detectortest` harness), dispatcher with per-detector isolation and accounting, explicit catalog + tag-based `--select`, assembler (CanonicalKey identity, keep-and-relate merge, grouped noisy-OR confidence, refusal-first relations), rule-engine compiler (full [rule-schema.md](./rule-schema.md) lint contract, four-layer merge, self-invalidating ruleset hash, Aho–Corasick prefilter, region lexers for all 9 rule-targetable languages), `detectors-gen`, `airom detectors list/explain` | **Complete.** `airom fs . --rules pack.yaml` runs user rule packs end-to-end today |
+| Detectors & rule packs: binary model-file parsers (GGUF, safetensors, ONNX, Torch, SavedModel, TFLite, HDF5, TensorRT, all fuzzed) with an artifact-risk overlay (pickle imports, Keras Lambda, GGUF template gadgets, SavedModel PyFunc → CycloneDX `vulnerabilities[]`/SARIF), 8-ecosystem manifest detectors plus lockfile (npm/yarn/pnpm/poetry/uv/pipenv) and installed-metadata (`.dist-info`/`.egg-info`) version resolution, Go AST detector, prompt/dataset/infra detectors, phase-2 project detectors (HF-dir assembly, adapter lineage, config binding, RAG synthesis), 69 embedded rule packs / 144 rules across 9 categories (incl. a `security` category and a rule-level `risk:` field), `rules list/lint/test` + `dev` scaffolding | **Complete.** Scans a real AI project into a rich AIBOM (models, embeddings, vector DBs, frameworks, weights, prompts, infra, RAG pipelines) |
 | Sources: `repo` (exec-git shallow clone + local worktrees), `image` (docker-save/OCI archive + OCI layout; live registry/daemon pull is a follow-up), `k8s` (offline `--manifests` image enumeration; live cluster is a follow-up) | **Complete** (with the noted follow-ups) |
 | Writers: native JSON (versioned, lossless superset, round-trip tested), CycloneDX 1.6/1.7 ML-BOM (modelCard + `evidence.occurrences[]` + `vulnerabilities[]` for risks + `definitions`/`declarations` for compliance, validated against the official schemas), SARIF 2.1.0 (one rule per detector/risk, one result per occurrence, line-free fingerprints), YAML, a Markdown compliance report, OpenVEX 0.2.0, SPDX 3.0.1 JSON-LD (AI/Dataset/Software/Security profiles, `NOASSERTION` discipline on required fields), table; multi-output `-o fmt=path` | **Complete.** `airom scan . -o cyclonedx=bom.json -o spdx=bom.spdx.json` emits both from one pass |
 | Compliance mapping (`--compliance`): AIBOM → governance-framework controls (met/gap/manual, no fabricated scores), projected as CycloneDX attestations + a Markdown report, gateable via `--fail-on compliance:gap`. Frameworks: NIST AI RMF 1.0, OWASP Agentic AI ([docs/compliance.md](./compliance.md)) | **Complete.** Evidence-linked, deterministic, offline |
-| CVE overlay (on by default, `--no-cve`): the AI packages AIROM inventoried, queried against OSV.dev, into CycloneDX `vulnerabilities[]` / SARIF / a Trivy-style detail table, with a locally computed CVSS score, a version-aware fixed-in, and a fail-closed `--fail-on cve` gate ([docs/cve.md](./cve.md)) | **Complete.** The only overlay that needs the network; refuses under `--offline` rather than reporting a quiet nothing |
+| CVE overlay (on by default, `--no-cve`): the AI packages AIROM inventoried, queried against OSV.dev, into CycloneDX `vulnerabilities[]` / SARIF / a per-CVE detail table, with a locally computed CVSS score, a version-aware fixed-in, exploitation status from CISA's Known Exploited Vulnerabilities catalog (a local catalog that rides the signed bundle, so it adds no requests of its own), and fail-closed `--fail-on cve` / `cve:kev` gates ([docs/cve.md](./cve.md)) | **Complete.** The only overlay that needs the network; refuses under `--offline` rather than reporting a quiet nothing |
 | Model lifecycle / EOL overlay (on by default, `--no-eol`): hosted models matched against a curated catalog of provider retirement announcements, with every claim dated and sourced, none inferred from naming, gateable via `--fail-on eol` ([docs/eol.md](./eol.md)) | **Complete.** Offline; a model the catalog does not cover carries **no claim**, never a quiet "supported" |
 | AIBOM diff (`airom diff <old> <new>`): the semantic delta between two native documents: added, removed, or changed, keyed by stable component ID, with the risk, CVE, and lifecycle overlays on the rows. `table`/`markdown`/`json`, gateable via `--fail-on` over added and changed only ([docs/cli.md](./cli.md)) | **Complete.** Refuses to gate when the two documents came from different tooling, rather than blaming a PR for a rule change |
 | CVE remediation (`--fix`, `--fix-all`, `--fix-verify`): an interactive advisory table that rewrites a vulnerable pin in the manifest that declares it, refusing unless the line still spells out both the package as a complete name and the version being replaced. Lockfiles, installed metadata, frozen binaries, and `pom.xml` are reported with a reason rather than a button. `--fix-verify` dry-runs the ecosystem's resolver before and after, so a clash the fix caused is told apart from one the manifest already had ([docs/cve.md](./cve.md)) | **Complete.** The first thing AIROM writes to your tree; it refuses rather than guesses, and never reports a verdict the resolver did not reach |
+| Scan assurance: every document carries its own coverage account (files the walk excluded, directories pruned whole, reads truncated at the size cap, whether the CVE and lifecycle overlays actually ran, and the confidence model behind the numbers), surfaced in native JSON, CycloneDX `airom:assurance.*` properties, and the table summary | **Complete.** The answer to "what did this scan not prove", stated by the scan itself |
 | Signed rule-update channel (`airom rules update`): ed25519-verified bundles from [airomhq/airom-rules](https://github.com/airomhq/airom-rules) carrying rule packs and lifecycle catalogs, so detection and retirement dates refresh without a new binary; every AIBOM records `rulesVersion` + `rulesHash` + `eolCatalog` ([docs/cli.md](./cli.md)) | **Complete.** The only network path outside `--cve`; scans themselves never fetch |
 | Test suite: golden end-to-end fixture repos through the whole pipeline into every format, official CycloneDX/SARIF schema conformance, `docs/mapping.md` round-trip enforcement, full-scan determinism (`--parallel 1` vs `16`), chaos degradation, and a P2 RSS-ceiling regression harness, all under `-race`, ~74% coverage | **Complete** |
 | Release automation: CI (lint/vet/gofmt, `-race` tests on Linux+macOS, `CGO_ENABLED=0` cross-compile matrix for all six targets, generated-code drift check, fuzz smoke, CodeQL), goreleaser (static matrix builds, checksums, keyless cosign signing, and a self-scan that fails the release if the built binary cannot scan), Dependabot, issue/PR templates, `SECURITY.md`/`CODE_OF_CONDUCT.md`/`CONTRIBUTING.md`, and a PyPI publish gated on installing and running every wheel on the platform it targets | **Complete** |
@@ -32,21 +33,27 @@ AIROM is at **v0.4.0**: feature-complete against the 10-phase plan, architecture
 Known gaps, each surfaced in the affected flag's own `--help` rather than only here: caching is not implemented (every scan is cold, `--no-cache` is a no-op), live registry/daemon image pulls are not available (use `airom image --input <archive>`), and live-cluster scanning is not available (use `airom k8s --manifests <dir>`).
 
 
-## Comparison
+## Scope
 
-No FUD, just positioning. The tools below solve different problems:
+What AIROM is for, stated positively, so that a reader can tell whether it is the
+right tool without a comparison table:
 
-| | AIROM | Registry-centric AIBOM generators | Proprietary AI security scanners |
-|---|---|---|---|
-| Input | **Your repo, image, or cluster** | A registry entry you name (e.g. an HF repo) | Varies; often model artifacts or SaaS-connected repos |
-| Answers "why is this in my AIBOM?" | **Yes: file:line occurrences, technique, confidence in the BOM** | No. Output describes the model, not your usage of it | Typically findings without BOM-native evidence |
-| CycloneDX `evidence.occurrences[]` | **Emitted** | Not emitted | Not emitted |
-| Load-time risk detection | **Built in: pickle, Lambda, template, PyFunc, unsafe-load, as CycloneDX `vulnerabilities[]` + SARIF, offline** | No | Varies. Some scan model artifacts, typically SaaS or agent-based |
-| Known-CVE overlay | **On by default. AI deps matched against OSV.dev with real CVSS v3 scores, into the same `vulnerabilities[]`/SARIF; `--no-cve` for offline/reproducible** | Rarely | Sometimes, usually as the core product |
-| Compliance mapping | **Evidence-linked: NIST AI RMF and OWASP Agentic as CycloneDX attestations, honest about what a scan can't verify** | No | Sometimes, but without BOM-native evidence |
-| Coverage | Hosted APIs **and** local weights **and** frameworks, vector DBs, prompts, datasets, params, infra, RAG graphs | The named model | Usually model files and/or a curated subset |
-| Distribution | Single static Go binary, offline-capable | Python package | Agent or SaaS |
-| License | Apache 2.0 | Varies (often open source) | Proprietary |
+- **The ground truth is your codebase.** AIROM reads the code, configuration,
+  manifests, lockfiles, and binary headers in a target you control, and reports what
+  it found there. It does not generate a model card from a registry entry you name,
+  and it does not need one to work.
+- **The inventory has to be defensible.** Every entry carries the `file:line` it came
+  from, the detection technique, and the arithmetic behind its confidence, emitted as
+  CycloneDX `evidence.occurrences[]` and `evidence.identity[]`. If an entry cannot be
+  substantiated it is not asserted.
+- **It runs where your code runs.** A single static binary, offline-capable, with no
+  agent, daemon, account, or SaaS dependency. The only overlay that needs the network
+  is the CVE check, and it refuses under `--offline` rather than reporting a quiet
+  nothing.
+- **Findings are not failures.** A completed scan exits `0` regardless of what it
+  found; gating is opt-in through `--exit-code` and `--fail-on`, so AIROM can be added
+  to a pipeline before anyone has agreed what should break a build.
 
-If you already know exactly which registry model you use and want its card, a registry-centric generator is the right tool. AIROM is for when the ground truth is your codebase and you have to prove it.
-
+What it is **not**: a runtime or behavioural monitor, a model-quality or red-teaming
+harness, and not a general SBOM generator — the AI asset graph is the whole scope, and
+non-AI dependencies are deliberately absent from the output.

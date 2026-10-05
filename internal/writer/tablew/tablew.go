@@ -225,6 +225,41 @@ func writeSummary(w io.Writer, inv *airom.Inventory, comps []airom.Component) {
 		}
 	}
 
+	// Assurance — what this scan did NOT establish. Printed whenever there is
+	// something to say: excluded files, truncated reads, an overlay that never
+	// ran, or a component the CVE overlay could not check. A fully-covered scan
+	// with both overlays on says so in one line, because "checked and clean"
+	// is a claim worth making out loud.
+	lines = append(lines, "", "Assurance")
+	st := inv.Stats
+	if st.FilesIgnored > 0 || st.DirsPruned > 0 {
+		lines = append(lines, fmt.Sprintf("  %-18s %d files, %d dirs pruned", "ignored", st.FilesIgnored, st.DirsPruned))
+	}
+	if st.FilesTruncated > 0 {
+		lines = append(lines, fmt.Sprintf("  %-18s %d files read only to the size cap", "truncated", st.FilesTruncated))
+	}
+	if e := st.Enrichment; e != nil {
+		switch {
+		case !e.CVE.Enabled:
+			lines = append(lines, "  cve                not checked (overlay off)")
+		case e.CVE.Unchecked > 0:
+			lines = append(lines, fmt.Sprintf("  cve                %d component(s) NOT checked (network)", e.CVE.Unchecked))
+		default:
+			lines = append(lines, "  cve                all eligible components checked")
+		}
+		switch {
+		case !e.EOL.Enabled:
+			lines = append(lines, "  lifecycle          not checked (overlay off)")
+		case !e.EOL.CatalogLoaded:
+			lines = append(lines, "  lifecycle          catalog unavailable, nothing checked")
+		default:
+			lines = append(lines, "  lifecycle          catalog consulted")
+		}
+	}
+	if st.ConfidenceModel != "" {
+		lines = append(lines, kv("Confidence", st.ConfidenceModel))
+	}
+
 	SummaryBox(w, "Scan Summary", lines)
 }
 
@@ -493,6 +528,7 @@ func writeVulnTable(w io.Writer, comps []airom.Component) {
 		lib, id    string
 		sev        airom.VulnSeverity
 		status     string
+		kev        bool
 		installed  string
 		fixed      string
 		title, url string
@@ -506,7 +542,7 @@ func writeVulnTable(w io.Writer, comps []airom.Component) {
 				status = "fixed"
 			}
 			rows = append(rows, vrow{
-				lib: name(c), id: v.ID, sev: v.Severity, status: status,
+				lib: name(c), id: v.ID, sev: v.Severity, status: status, kev: v.KEV != nil,
 				installed: dash(installed), fixed: dash(v.Fixed), title: v.Summary, url: v.URL,
 			})
 		}
@@ -515,6 +551,12 @@ func writeVulnTable(w io.Writer, comps []airom.Component) {
 		return
 	}
 	sort.SliceStable(rows, func(i, j int) bool {
+		// Exploitation outranks severity. CVSS rates what exploitation WOULD
+		// cost; KEV records that it is happening, and the row somebody must act
+		// on today is the latter even when its score is lower.
+		if rows[i].kev != rows[j].kev {
+			return rows[i].kev
+		}
 		if ri, rj := vulnRank(rows[i].sev), vulnRank(rows[j].sev); ri != rj {
 			return ri > rj // most severe first
 		}
@@ -525,7 +567,22 @@ func writeVulnTable(w io.Writer, comps []airom.Component) {
 	})
 
 	const titleWidth = 48
-	headers := []string{"LIBRARY", "VULNERABILITY", "SEVERITY", "STATUS", "INSTALLED", "FIXED", "TITLE"}
+	// EXPLOITED appears only when something is: an all-"no" column on the scans
+	// where nothing is under exploitation is noise, and its absence is not a
+	// claim — the assurance account records whether the catalog ran.
+	anyKEV := false
+	for _, r := range rows {
+		if r.kev {
+			anyKEV = true
+			break
+		}
+	}
+	headers := []string{"LIBRARY", "VULNERABILITY", "SEVERITY"}
+	if anyKEV {
+		headers = append(headers, "EXPLOITED")
+	}
+	headers = append(headers, "STATUS", "INSTALLED", "FIXED", "TITLE")
+
 	cells := make([][][]string, 0, len(rows))
 	for _, r := range rows {
 		title := wrapText(r.title, titleWidth)
@@ -535,23 +592,29 @@ func writeVulnTable(w io.Writer, comps []airom.Component) {
 		if len(title) == 0 {
 			title = []string{"-"}
 		}
-		cells = append(cells, [][]string{
+		row := [][]string{
 			{r.lib},
 			{r.id},
 			{strings.ToUpper(string(r.sev))},
-			{r.status},
-			{r.installed},
-			{r.fixed},
-			title,
-		})
+		}
+		if anyKEV {
+			row = append(row, []string{kevCell(r.kev)})
+		}
+		row = append(row, []string{r.status}, []string{r.installed}, []string{r.fixed}, title)
+		cells = append(cells, row)
 	}
 
-	// Vertically merge the per-package columns (LIBRARY, INSTALLED, FIXED) across
-	// adjacent rows that share a library, the way Trivy does — so a package with
-	// many CVEs shows its name and versions once, spanning the group, instead of
-	// repeating them on every row. VULNERABILITY, SEVERITY, STATUS, and TITLE
-	// stay per-row so the individual findings remain separated.
-	const colLibrary, colInstalled, colFixed = 0, 4, 5
+	// Vertically merge the per-package columns (LIBRARY, INSTALLED, FIXED)
+	// across adjacent rows that share a library — so a package with many CVEs
+	// shows its name and versions once, spanning the group, instead of
+	// repeating them on every row. VULNERABILITY, SEVERITY, EXPLOITED, STATUS
+	// and TITLE stay per-row so the individual findings remain separated.
+	// The indices shift when EXPLOITED is present, so they are derived from the
+	// headers actually emitted rather than hard-coded twice.
+	colLibrary, colInstalled, colFixed := 0, 4, 5
+	if anyKEV {
+		colInstalled, colFixed = 5, 6
+	}
 	mergeUp := make([][]bool, len(rows))
 	for i := range rows {
 		m := make([]bool, len(headers))
@@ -799,4 +862,14 @@ func locLess(a, b airom.Location) bool {
 		return a.Path < b.Path
 	}
 	return a.Line < b.Line
+}
+
+// kevCell renders the EXPLOITED column. "yes" rather than a symbol: this table
+// is read in CI logs where glyphs are unreliable, and the one thing this cell
+// must do is survive being copied into a ticket.
+func kevCell(kev bool) string {
+	if kev {
+		return "yes"
+	}
+	return "-"
 }

@@ -4,30 +4,33 @@
 >
 > AIROM is a single static Go binary that discovers AI
 > assets in a filesystem, source repository, container image, or Kubernetes workload and emits
-> an AI Bill of Materials (AIBOM), with file:line evidence, detection technique, and a
-> calibrated confidence score behind every entry.
+> an AI Bill of Materials (AIBOM), with file:line evidence, detection technique, and an
+> evidence-weighted confidence score behind every entry.
 >
-> This document is the canonical architecture. It was produced by researching Syft,
-> gitleaks, and semgrep internals; verifying the CycloneDX 1.6/1.7 ML-BOM, SPDX 3.0.1 AI
-> profile, and SARIF 2.1.0 schemas against their published specs; and adversarially reviewing
-> three competing designs (extensibility-first, performance-first, data-model-first) through
-> contributor, production-operations, and correctness lenses. Decisions record their losing
+> This document is the canonical architecture. It was produced by verifying the CycloneDX
+> 1.6/1.7 ML-BOM, SPDX 3.0.1 AI profile, and SARIF 2.1.0 schemas against their published
+> specs, and by adversarially reviewing three candidate designs for this scanner
+> (extensibility-first, performance-first, data-model-first) through contributor,
+> production-operations, and correctness lenses. Decisions record their rejected
 > alternatives in §15.
 
 ---
 
-## 1. Vision and positioning
+## 1. Vision and design goals
 
-Every scanner in this space today is either registry-centric (generates a model card from a
-HuggingFace repo you name) or proprietary and Python-centric. Nobody scans *your code* and
-answers the auditor's question: **"why does your AIBOM say gpt-4.1?"**
+AIROM scans a codebase, image, or workload and answers the auditor's question:
+**"why does your AIBOM say gpt-4.1?"** The architecture is organized around being able to
+answer it — which is a stronger constraint than producing an inventory, because the answer
+has to survive detection, assembly, and serialization to reach the consumer.
 
-AIROM's differentiators, in priority order:
+AIROM's design goals, in priority order:
 
 1. **Evidence-first.** Every component carries occurrences (`file:line`, snippet, enclosing
-   symbol), the detection technique, and the arithmetic behind its confidence score. AIROM
-   emits CycloneDX 1.6 `evidence.identity[]` + `evidence.occurrences[]`, which no shipping
-   AIBOM tool populates, and a SARIF projection for GitHub Code Scanning, from one graph.
+   symbol), the detection technique, and the arithmetic behind its confidence score. Evidence
+   is retained during detection rather than reconstructed afterwards, so inventory entries can
+   be traced back to source occurrences and carried into every output format with a slot for
+   them: CycloneDX 1.6 `evidence.identity[]` + `evidence.occurrences[]`, and a SARIF
+   projection for GitHub Code Scanning, both from one graph.
 2. **Breadth.** Hosted model APIs (OpenAI, Anthropic, Gemini, Bedrock, Azure OpenAI, Cohere,
    Mistral, Groq, Ollama…), local weights (GGUF, safetensors, ONNX, Torch, SavedModel,
    TensorRT…), embedding models, frameworks, vector databases, prompts, datasets, AI
@@ -347,7 +350,7 @@ type ModelFacet struct {
     Format           OptString    // "gguf","safetensors","onnx","torch-pickle",…
     BaseModel        OptString    // adapter lineage → also a DERIVED_FROM edge
     GenerationParams []BoundParam // §9.5 — params with provenance
-    PickleRisk       *PickleRisk  // suspicious GLOBAL opcodes (security differentiator)
+    PickleRisk       *PickleRisk  // suspicious GLOBAL opcodes (load-time exec surface)
     Card             *ModelCard   // CDX modelCard superset: metrics, considerations, energy
 }
 
@@ -486,7 +489,7 @@ rule pack), not one per file type, not a mega-detector per language.
 - Rule-engine detectors are constructed explicitly with the compiled `*Matcher` as a
   constructor argument, no globals, no two-sources-of-truth wiring.
 - Duplicate detector IDs panic at startup (fails in CI, never silently shadows).
-- Selection uses Syft's proven tag/expression grammar: defaults per source type, then
+- Selection uses a tag/expression grammar: defaults per source type, then
   `--select "python,+modelfile/gguf,-dataset"`. Which expression enabled which detector is
   recorded in `Inventory.Stats` (auditability).
 - Library embedders pass their own detectors to the engine constructor, the same explicit
@@ -536,23 +539,27 @@ rules:
     confidence: 0.7
 ```
 
-Compilation (gitleaks lineage): `rules.Compile()` runs **once at startup**, validates every
+Compilation: `rules.Compile()` runs **once at startup**, validates every
 pack (unique IDs across all packs, regexes compile, named groups referenced by templates
 exist, **keywords non-empty: the linter rejects keyword-less rules**, so nobody ships an
 un-prefiltered regex), then builds **one Aho–Corasick trie over all packs' keywords**. Per
 file: the region lexer classifies code/comment/string; the trie runs over code+string regions;
 only regexes whose keywords hit ever execute. Hundreds of rules × 100k files stays cheap
-because the regex engine is literal-gated (the shape gitleaks and semgrep both proved).
+because the regex engine is literal-gated: a rule cannot reach its regex without first
+matching a mandatory literal, which is what keeps the scan linear in input size.
 
-Three rule layers: **embedded defaults** (`go:embed`, offline, versioned with the binary) →
-**user overlay** (`--rules extra.yaml`; merge by ID: add/override/disable) → **remote
-registry** (v2, OCI-distributed, pairs with signing work). The SHA-256 of the *effective
+Four rule layers: **embedded defaults** (`go:embed`, offline, versioned with the binary) →
+**signed bundle** (airom-rules, installed by `airom rules update`, layered over the
+built-ins rather than replacing them) → **user overlay** (`--rules extra.yaml`) → **remote
+registry** (v2, OCI-distributed, pairs with signing work). Every join merges by rule ID:
+add/override/disable. The SHA-256 of the *effective
 compiled ruleset* participates in every cache key, rules-as-data is self-invalidating,
 which structurally eliminates the forgotten-`Version()`-bump stale-cache bug for the
 entire fast-moving surface.
 
 Every rule ships **≥1 positive and ≥1 negative fixture**, enforced by `airom rules lint`
-in CI (semgrep-style hygiene).
+in CI: a rule that cannot demonstrate both what it matches and what it must not match does
+not compile.
 
 ### 6.4 The pure-Go language strategy
 
@@ -734,6 +741,16 @@ Step 3  clamp 0.99. Only MethodHash against a known-weights digest — or a v2
         verified attestation — may assert 1.0.
 ```
 
+**What these numbers are, and are not.** Per-sighting scores are author-assigned
+evidence weights (rule-schema.md defines the bands), and the calculus above
+combines them. The result is ordinal: a 0.9 rests on stronger evidence than a
+0.6. It is **not** an empirically calibrated probability: no study has
+established that findings scored 0.85 are correct ~85% of the time. AIROM's
+docs deliberately say "evidence-weighted", never "calibrated", until a public
+benchmark exists to measure calibration error against ground truth; claiming
+statistical calibration without that measurement would be the kind of
+over-claim this tool exists to catch.
+
 Worked examples: `gpt-4.1` regex literal (0.85) in 12 files → ≈0.87. A GGUF found by
 extension (0.5, filename) then confirmed by magic+header parse (0.95, binary-analysis) →
 1−(0.5·0.05) = 0.975. A hundred filename-only hints saturate near 0.65, one method bucket.
@@ -762,6 +779,15 @@ type.
    warning, **never a guessed edge**. Call-site capture beats the proximity window when
    both fire. Conflicting values are never merged: two call sites with different
    temperatures are two `BoundParam`s.
+
+**Bound beats standalone (airom-bench finding, 2026-08).** A call-site kwarg
+is line-anchored, so the standalone aiconfig fallback pack can see the same
+`temperature=0.1` the capture_params story already bound to the model. The
+assembler drops an ai-config component only when every one of its occurrences
+duplicates a same-named bound param in the same file within the capture
+window; one occurrence outside that evidence keeps the component whole. An
+ai-config component in the output therefore always means UNBOUND, which is
+what the kind is defined to mean.
 
 ## 10. Caching (`internal/cache`, bbolt)
 
@@ -811,8 +837,8 @@ SARIF to file in one scan).
   modelCard shape is identical in 1.6/1.7). Model kinds → `machine-learning-model` +
   `modelCard` (params, hyperparams, considerations, energy); dataset/prompt → `data`;
   framework/library → native types; `evidence.identity[]` from IdentityClaims (confidence +
-  technique) and `evidence.occurrences[]` from Occurrences (file/line/snippet, the
-  differentiator no other tool emits); `depends-on` → `dependencies[]`; `trained-on` →
+  technique) and `evidence.occurrences[]` from Occurrences (file/line/snippet, the field the
+  whole evidence model exists to fill); `depends-on` → `dependencies[]`; `trained-on` →
   `modelCard.modelParameters.datasets[].ref`; remaining edge types → documented `airom:rel.*`
   properties until CDX grows typed relationships. Overflow → `airom:*` properties.
 - **sarif**, via `owenrumney/go-sarif/v3`; a pure projection of Evidence: one rule per
@@ -840,7 +866,7 @@ against the official schemas in CI. Spec compliance is a test, not a hope.
 
 ```
 airom
-├── scan <target>          # scheme auto-detect: dir | git URL | image ref (Syft-style)
+├── scan <target>          # scheme auto-detect: dir | git URL | image ref
 ├── fs <path>              # explicit nouns (scanner-style)
 ├── repo <url|path>
 ├── image <ref>            # --input tar, --platform; remote→daemon→tarball→layout chain
@@ -879,7 +905,8 @@ AIROM is a security tool whose parsers eat untrusted bytes; it must be hardened 
   (adversarial safetensors header lengths are capped; test-asserted).
 - The **pickle opcode walker** statically walks `.pt`/`.pkl` streams for suspicious `GLOBAL`
   opcodes (`os.system`, `subprocess`, `builtins.eval`…) without ever executing, surfacing
-  `PickleRisk` on torch components is a security differentiator, not just inventory.
+  `PickleRisk` on torch components: the scan reports a load-time execution surface,
+  not just an inventory entry.
 - No network access during `fs`/`repo`(local)/`image --input` scans; `--offline` asserts it
   globally.
 - Release binaries: `CGO_ENABLED=0`, reproducible builds, checksummed, and
@@ -917,7 +944,7 @@ ns + invocations) into the Inventory, maintainers triage detector #217 with data
 | D2 | Rules: declarative vs code | all-Go / all-YAML / hybrid | **Hybrid with the bright line: "keywords + regex over regions + templated claim = YAML; loop/parser/cross-file = Go"** | Model IDs churn weekly, must be a rules PR, never a release. Binary headers and cross-file logic are not expressible as patterns. Mandatory keywords (lint-enforced) + compile-once + ruleset hash in cache keys. |
 | D3 | Rule pack layout | per-category monoliths / per-provider files | **One file per provider** | Merge-conflict avoidance and CODEOWNERS routing at hundreds of contributors. |
 | D4 | Registration | `init()` self-registration / explicit catalog | **Explicit catalog in composition root; generated built-in list; compiled matcher via constructor** | Deterministic for embedders/tests; rule detectors need compiled state without globals; generated list = no hand-edited conflict hotspot; duplicate IDs panic at startup. |
-| D5 | Public API surface | types-only / full 6-package SDK / middle | **`pkg/airom` (domain) + `detect` + `purl` + `detectortest`; v0.x + apidiff CI; rules schema internal until stable** | The plugin SDK is the ecosystem bet and must be public (incl. the contract harness); Syft's rename pain says don't freeze what hasn't survived third-party use. |
+| D5 | Public API surface | types-only / full 6-package SDK / middle | **`pkg/airom` (domain) + `detect` + `purl` + `detectortest`; v0.x + apidiff CI; rules schema internal until stable** | The plugin SDK is the ecosystem bet and must be public (incl. the contract harness); a public API that has not yet survived third-party use should not be frozen. |
 | D6 | Concurrency topology | per-(file,detector) goroutines / per-file workers | **Single producer → bounded chan → file workers (detectors sequential per file) → single collector; hard barrier; flat phase-2 pool; clamped byte-semaphore** | Enables read-once with zero buffer synchronization; deadlock-proof channel ownership; `min(size,budget)` clamp kills the 40 GB-file deadlock; no post-detector DAG scheduler (core-churn magnet, rejected). |
 | D7 | Identity | purl-first / (Kind,Name,Version,Provider) tuple / CanonicalKey | **CanonicalKey with Class ≠ Kind + content-hash discriminator; purl derived, never root** | Kind-in-key mints embedding/model twins; purl-first splits brains between purl-ful and purl-less detectors; weights identity = bytes. |
 | D8 | Confidence | max / flat noisy-OR / grouped noisy-OR | **Per-detector max + capped repetition term → per-method noisy-OR → 0.99 clamp (1.0 = hash/attestation only)** | Flat noisy-OR launders 50 identical hits into fake certainty; max ignores corroboration. |

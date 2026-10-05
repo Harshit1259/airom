@@ -48,7 +48,7 @@ output format projects them.
 | CycloneDX | top-level `vulnerabilities[]` carrying the CVE `id`, `source.name: osv.dev`, a `ratings[]` entry with `method: CVSSv31`, the real `score`, `severity`, and `vector`, aliases as `references[]`, and `affects[].ref` pointing at the component's `bom-ref`. The first fixed version rides in an `airom:cve.fixedVersion` property. |
 | SARIF | a `cve/<id>` rule carrying the GitHub `security-severity` property. That is the **real CVSS base score**, not the synthetic marker the risk rules use. It also carries a result (level `error`/`warning`/`note` by severity) anchored to the manifest line that declared the vulnerable package. |
 | Native JSON / YAML | `component.vulnerabilities[]` holding `{id, aliases, severity, score, vector, summary, fixedVersion, source, url}`. |
-| Table | a `VULN` column on the component (top severity + count, e.g. `high (2)`), a `Vulnerabilities` breakdown in the summary panel, and a per-CVE detail table below with `LIBRARY / VULNERABILITY / SEVERITY / STATUS / INSTALLED / FIXED / TITLE`, most-severe first. Per-package columns (`LIBRARY`, `INSTALLED`, `FIXED`) merge vertically across a package's CVEs, Trivy-style, so the name and versions show once and span the group. |
+| Table | a `VULN` column on the component (top severity + count, e.g. `high (2)`), a `Vulnerabilities` breakdown in the summary panel, and a per-CVE detail table below with `LIBRARY / VULNERABILITY / SEVERITY / STATUS / INSTALLED / FIXED / TITLE`, most-severe first. Per-package columns (`LIBRARY`, `INSTALLED`, `FIXED`) merge vertically across a package's CVEs, so the name and versions show once and span the group. |
 | `--fail-on` | `cve` (any CVE), or `cve:<severity>` (a **threshold**; see below). |
 | `--fix` / `--fix-all` | an interactive table with a per-package Fix action, or the same plan applied non-interactively. See [Fixing what it finds](#fixing-what-it-finds). |
 | `--fix-verify` | a dry-run resolver check that the fixed pins still install together. See [Verifying the fix actually builds](#verifying-the-fix-actually-builds----fix-verify). |
@@ -255,7 +255,7 @@ and only the ecosystem's resolver can answer it.
 |---|---|---|
 | `requirements.txt` | `pip install --dry-run --report` | `--report` puts pip in resolution mode, which skips the install-target checks a PEP 668 system Python would otherwise refuse on |
 | `package.json` | `npm install --dry-run` | |
-| `go.mod` | `go list -m all` | catches a version that does not exist and a `go.sum` the bump invalidated. Deliberately without `-e`, which would report those errors in the output and exit 0 anyway |
+| `go.mod` | `go list -m all`, in a staged copy | catches a version that does not exist. Runs against a temp copy of `go.mod`+`go.sum`, never the project: EVERY `go.mod` edit invalidates `go.sum`, so checking in place reported that mechanical staleness as a conflict the fix had introduced, on every Go project. The copy lets `go` regenerate `go.sum` there, so the verdict is about the pins; your files are untouched. Deliberately without `-e`, which would report module errors in the output and exit 0 anyway: success for the one failure this check exists to catch. |
 | everything else | — | reported as **not checked**, with the reason. `pyproject.toml`, `Cargo.toml`, and `build.gradle` resolve by writing a lockfile, and a check that mutates your tree is not a check |
 
 **A conflict is attributed before it is acted on.** The same check also runs
@@ -390,6 +390,65 @@ invented).
 `cve:<severity>` is a **threshold, not an exact match**: `--fail-on cve:high`
 fires on high **and** critical CVEs; `cve:medium` fires on medium and above.
 Use bare `cve` to fail on any CVE at all.
+
+## Known exploited vulnerabilities (CISA KEV)
+
+CVSS answers *how bad would exploitation be*. It does not answer *is this being
+exploited*, and those are different questions with different answers: a
+medium-severity CVE under active exploitation is a more urgent problem than a
+critical nobody has ever used.
+
+Every CVE the overlay finds is matched against [CISA's Known Exploited
+Vulnerabilities catalog][kev]. A match attaches the dates CISA published:
+
+```console
+$ airom scan . -o table
+```
+
+```
+│ LIBRARY │ VULNERABILITY  │ SEVERITY │ EXPLOITED │ STATUS │ INSTALLED │ FIXED  │
+│ mlflow  │ CVE-2026-64849 │ CRITICAL │ yes       │ fixed  │ 2.0.0     │ 3.15.0 │
+```
+
+The `EXPLOITED` column appears only when something is, and exploited advisories
+sort above everything else regardless of score — the row you have to act on
+today is the one CISA has seen used, not the one with the highest number.
+
+Gate on it directly:
+
+```bash
+airom scan . --exit-code 1 --fail-on "cve:kev"
+```
+
+`cve:kev` fires at **any** severity. That is the point: a severity threshold is
+exactly what would miss an exploited medium.
+
+### What the catalog does and does not claim
+
+- **A CVE absent from the catalog gets no record.** That is "CISA does not list
+  it", not "not exploited", and the two are very different. Nothing is written
+  to say a CVE is safe.
+- **KEV never rewrites severity or score.** Exploitation and impact are separate
+  axes; folding one into the other would publish a number nobody assigned. The
+  record is reported beside the CVSS rating and left for you to weigh.
+- **A stale catalog under-reports.** CISA adds entries several times a week, so a
+  catalog nobody has refreshed is silently missing exploitation that is already
+  public. A scan warns once the catalog is more than 30 days old, and
+  `airom rules update` refreshes it through the signed bundle without a binary
+  upgrade.
+- **Which catalog answered is recorded**, in `stats.enrichment.cve.kevCatalog`.
+  That is what makes an absent record readable: with a catalog named, nothing
+  attached means CISA does not list the CVE; with none, it means nobody looked.
+
+### It needs the CVE overlay, so it needs the network
+
+The catalog itself is local — embedded in the binary, refreshable through the
+signed bundle — so this adds **no network requests of its own**. But it has
+nothing to mark unless the CVE overlay ran first, and that overlay needs OSV.
+Under `--offline` there are no CVEs and therefore no exploitation status;
+`--fail-on cve:kev` is refused there for the same reason any CVE gate is.
+
+[kev]: https://www.cisa.gov/known-exploited-vulnerabilities-catalog
 
 ## Honesty and degradation
 

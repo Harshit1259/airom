@@ -18,7 +18,7 @@ permissions:
   contents: read
 
 env:
-  GO_VERSION: "1.26"
+  GO_VERSION: "1.26" # newest 1.26.x at run time via check-latest (see ci.yml)
 
 jobs:
   # Enumerate targets rather than hard-coding them: a new Fuzz* function should
@@ -30,10 +30,11 @@ jobs:
     outputs:
       matrix: ${{ steps.list.outputs.matrix }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
+          check-latest: true
           cache: true
       - id: list
         run: |
@@ -64,10 +65,11 @@ jobs:
     # manages ~450,000 — no single exec count serves both.
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-go@v5
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
         with:
           go-version: ${{ env.GO_VERSION }}
+          check-latest: true
           cache: true
 
       - name: Fuzz ${{ matrix.target }}
@@ -77,6 +79,14 @@ jobs:
           TARGET: ${{ matrix.target }}
           FUZZTIME: ${{ github.event.inputs.fuzztime || '10m' }}
         run: |
+          # errexit OFF, deliberately and explicitly. GitHub runs a Linux `run:`
+          # step as `bash -e {0}`, and `set -uo pipefail` does NOT clear that -e
+          # — so the failing pipeline below terminated the step immediately and
+          # every branch after it was dead code. The campaign therefore reported
+          # a deadline race exactly like a crash, and never printed any of these
+          # messages: three nights of the five before 2026-09-18 went red on a
+          # timing race, which is how a fuzz campaign teaches people to ignore it.
+          set +e
           set -uo pipefail
           go test -run '^$' -fuzz "^${TARGET}$" -fuzztime "$FUZZTIME" "$PKG" 2>&1 | tee /tmp/fuzz.log
           rc=${PIPESTATUS[0]}
@@ -106,7 +116,7 @@ jobs:
       # every plain `go test` replays.
       - name: Upload reproducer
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: fuzz-reproducer-${{ matrix.target }}
           path: "**/testdata/fuzz/**"

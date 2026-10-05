@@ -5,7 +5,7 @@
   "serialNumber": "urn:uuid:00000000-0000-4000-8000-000000000000",
   "version": 1,
   "metadata": {
-    "timestamp": "2026-08-01T12:00:00Z",
+    "timestamp": "2026-09-29T12:00:00Z",
     "lifecycles": [
       {
         "phase": "pre-build"
@@ -36,6 +36,22 @@
       ]
     },
     "properties": [
+      {
+        "name": "airom:assurance.confidenceModel",
+        "value": "evidence-weighted/1; not empirically calibrated"
+      },
+      {
+        "name": "airom:assurance.cve.enabled",
+        "value": "false"
+      },
+      {
+        "name": "airom:assurance.dirsPruned",
+        "value": "1"
+      },
+      {
+        "name": "airom:assurance.eol.enabled",
+        "value": "true"
+      },
       {
         "name": "airom:eol.catalog",
         "value": "builtin"
@@ -86,7 +102,7 @@
         },
         {
           "name": "airom:eol.verified",
-          "value": "2026-07-23"
+          "value": "2026-09-28"
         },
         {
           "name": "airom:kind",
@@ -95,10 +111,6 @@
         {
           "name": "airom:model.id",
           "value": "claude-sonnet-4-6"
-        },
-        {
-          "name": "airom:model.provider",
-          "value": "anthropic"
         },
         {
           "name": "airom:model.provider",
@@ -134,7 +146,7 @@
         },
         {
           "name": "airom:eol.daysRemaining",
-          "value": "83"
+          "value": "24"
         },
         {
           "name": "airom:eol.replacement",
@@ -158,7 +170,7 @@
         },
         {
           "name": "airom:eol.verified",
-          "value": "2026-07-23"
+          "value": "2026-09-28"
         },
         {
           "name": "airom:kind",
@@ -167,10 +179,6 @@
         {
           "name": "airom:model.id",
           "value": "gpt-4-turbo"
-        },
-        {
-          "name": "airom:model.provider",
-          "value": "openai"
         },
         {
           "name": "airom:model.provider",
@@ -249,41 +257,6 @@
       }
     },
     {
-      "bom-ref": "airom:737f185ea7c9f67f",
-      "type": "data",
-      "name": "max_tokens",
-      "properties": [
-        {
-          "name": "airom:confidence",
-          "value": "0.525"
-        },
-        {
-          "name": "airom:kind",
-          "value": "ai-config"
-        }
-      ],
-      "evidence": {
-        "occurrences": [
-          {
-            "location": "app.py",
-            "line": 40,
-            "additionalContext": "max_tokens=64,"
-          },
-          {
-            "location": "app.py",
-            "line": 46,
-            "additionalContext": "max_tokens=64,"
-          }
-        ]
-      },
-      "data": [
-        {
-          "type": "configuration",
-          "name": "max_tokens"
-        }
-      ]
-    },
-    {
       "bom-ref": "airom:76a548bfe1b671c7",
       "type": "machine-learning-model",
       "name": "claude-opus-4-1-20250805",
@@ -298,7 +271,7 @@
         },
         {
           "name": "airom:eol.daysRemaining",
-          "value": "4"
+          "value": "-55"
         },
         {
           "name": "airom:eol.replacement",
@@ -322,11 +295,11 @@
         },
         {
           "name": "airom:eol.state",
-          "value": "deprecated"
+          "value": "retired"
         },
         {
           "name": "airom:eol.verified",
-          "value": "2026-07-23"
+          "value": "2026-09-28"
         },
         {
           "name": "airom:kind",
@@ -335,10 +308,6 @@
         {
           "name": "airom:model.id",
           "value": "claude-opus-4-1-20250805"
-        },
-        {
-          "name": "airom:model.provider",
-          "value": "anthropic"
         },
         {
           "name": "airom:model.provider",
@@ -375,10 +344,6 @@
         {
           "name": "airom:model.id",
           "value": "gpt-4o"
-        },
-        {
-          "name": "airom:model.provider",
-          "value": "openai"
         },
         {
           "name": "airom:model.provider",
@@ -484,7 +449,7 @@
         },
         {
           "name": "airom:eol.daysRemaining",
-          "value": "-421"
+          "value": "-480"
         },
         {
           "name": "airom:eol.replacement",
@@ -508,7 +473,7 @@
         },
         {
           "name": "airom:eol.verified",
-          "value": "2026-07-23"
+          "value": "2026-09-28"
         },
         {
           "name": "airom:kind",
@@ -517,10 +482,6 @@
         {
           "name": "airom:model.id",
           "value": "gpt-4-32k"
-        },
-        {
-          "name": "airom:model.provider",
-          "value": "openai"
         },
         {
           "name": "airom:model.provider",
