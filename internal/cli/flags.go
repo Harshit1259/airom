@@ -39,9 +39,10 @@ func addGlobalFlags(fs *pflag.FlagSet) {
 	// working tree, and the one place a scanner must not act on its own guess is
 	// the place where it writes. --fix-all is the same plan applied without the
 	// table, for a terminal that cannot host one.
-	fs.Bool("fix", false, "after the scan, open an interactive advisory table and rewrite the manifest pins you choose (needs a terminal)")
+	fs.Bool("fix", false, "after the scan, open an interactive advisory table; clicking [ Fix ] upgrades that package to the first clean release (rewrites the pin and runs the package manager; needs a terminal)")
 	fs.Bool("fix-all", false, "rewrite every vulnerable manifest pin to its fixed version without prompting (implies no table)")
 	fs.Bool("fix-verify", false, "after fixing, run the ecosystem's resolver in dry-run mode to confirm the new pins still resolve (installs nothing)")
+	fs.Bool("fix-pin-only", false, "with --fix, a click only rewrites the manifest pin and does not run the package manager")
 	fs.Bool("fix-install", false, "after fixing, run the package manager for real: regenerate lockfiles and install the new versions (WRITES to lockfiles and your environment)")
 	fs.Bool("include-tests", false, "count AI found only in test scaffolding (testdata/, *_test.go, tests/, spec/) — hidden by default")
 	fs.Int("parallel", 0, "worker count (default: GOMAXPROCS)")

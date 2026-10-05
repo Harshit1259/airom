@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"sort"
 	"strings"
 
@@ -43,40 +44,130 @@ func runFixes(ctx context.Context, inv *airom.Inventory, cfg *Config) error {
 		return nil
 	}
 
-	// The baseline is taken BEFORE anything is edited, so a conflict afterwards
-	// can be attributed. Without it a manifest that already did not resolve gets
-	// blamed on the fix, and the revert offer would roll back real remediation
-	// to "solve" a problem it did not cause.
-	baseline := baselineVerify(ctx, cfg, targets)
+	// The advisory's fixed version is only the first release that advisory no
+	// longer covers. Ask the registry and OSV which published release actually
+	// ends the problem before offering it.
+	fmt.Fprintf(stderr, "\nairom fix: checking the package registries and OSV for the version each package should move to …\n")
+	targets = resolveTargets(ctx, targets)
 
 	if cfg.FixAll {
-		applied := applyAll(cfg.Target, targets)
+		// The baseline is taken BEFORE anything is edited, so a conflict
+		// afterwards can be attributed. Without it a manifest that already did
+		// not resolve gets blamed on the fix, and the revert offer would roll
+		// back real remediation to "solve" a problem it did not cause.
+		baseline := baselineVerify(ctx, cfg, targets)
+		applied := applyAll(cfg.Target, targets, cfg.FixInstall)
 		installFixes(ctx, cfg, applied, verifyFixes(ctx, cfg, applied, baseline))
+		upgradeDirect(ctx, cfg, targets)
 		return nil
 	}
 
-	out, err := fixui.Run(cfg.Target, targets)
+	// Interactive: every click is a full upgrade of that one package — the pin
+	// moves, the package manager installs it, and the result is read back and
+	// re-checked against OSV — so what the row says is what the project has.
+	opts := fix.UpgradeOptions{Install: !cfg.FixPinOnly, Verify: cfg.FixVerify, Out: io.Discard}
+	up := func(t fix.Target) fix.UpgradeResult { return fix.Upgrade(ctx, cfg.Target, t, opts) }
+	out, err := runTable(cfg.Target, targets, up)
 	if errors.Is(err, fixui.ErrNoTTY) {
 		// No terminal to click in. Say what the table would have offered and
 		// name the flag that does it without one, rather than failing a scan
 		// that otherwise succeeded.
-		s := fix.Summarize(targets)
-		fmt.Fprintf(stderr, "\nairom fix: --fix needs a terminal; %d of %d vulnerable package(s) can be fixed:\n\n%s\nRe-run with --fix-all to apply them non-interactively.\n",
-			s.Fixable, len(targets), fixui.Report(targets))
+		n := 0
+		for _, t := range targets {
+			if t.Upgradable() {
+				n++
+			}
+		}
+		fmt.Fprintf(stderr, "\nairom fix: --fix needs a terminal; %d of %d vulnerable package(s) can be upgraded:\n\n%s\nRe-run with --fix-all --fix-install to upgrade them non-interactively.\n",
+			n, len(targets), fixui.Report(targets))
 		return nil
 	}
 	if err != nil {
 		return fmt.Errorf("interactive fix: %w", err)
 	}
-	reportApplied(out.Applied, out.Failed)
-	installFixes(ctx, cfg, out.Applied, verifyFixes(ctx, cfg, out.Applied, baseline))
+	reportUpgrades(out.Upgrades)
 	return nil
+}
+
+// resolveTargets and runTable are variables so tests can run the fix stage
+// without the network or a terminal.
+var (
+	resolveTargets = func(ctx context.Context, ts []fix.Target) []fix.Target {
+		return fix.Resolve(ctx, ts, fix.ResolveOptions{})
+	}
+	runTable = fixui.RunWith
+)
+
+// upgradeDirect finishes --fix-all --fix-install for the packages that have no
+// pin to rewrite but can be upgraded by their package manager in place.
+func upgradeDirect(ctx context.Context, cfg *Config, targets []fix.Target) {
+	if !cfg.FixInstall {
+		return
+	}
+	var rs []fix.UpgradeResult
+	for _, t := range targets {
+		if t.Fixable || len(t.Direct) == 0 {
+			continue
+		}
+		fmt.Fprintf(stderr, "\nairom fix: upgrading %s %s → %s with its package manager\n", t.Package, t.Current, t.Fixed)
+		rs = append(rs, fix.Upgrade(ctx, cfg.Target, t, fix.UpgradeOptions{Install: true, Out: stderr}))
+	}
+	if len(rs) > 0 {
+		reportUpgrades(rs)
+	}
+}
+
+// reportUpgrades prints what each upgrade left in place, after the table has
+// closed and the scrollback is visible again.
+func reportUpgrades(rs []fix.UpgradeResult) {
+	if len(rs) == 0 {
+		fmt.Fprintln(stderr, "\nairom fix: nothing was upgraded.")
+		return
+	}
+	fmt.Fprintf(stderr, "\nairom fix: %d upgrade(s) attempted\n", len(rs))
+	for _, r := range rs {
+		osv := ""
+		switch {
+		case r.Advisories == 0:
+			osv = "; OSV lists no advisories for it"
+		case r.Advisories > 0:
+			osv = fmt.Sprintf("; OSV still lists %d advisories for it", r.Advisories)
+		}
+		switch r.Status {
+		case fix.UpgradeDone:
+			v := r.Installed
+			if v == "" {
+				v = r.To
+			}
+			fmt.Fprintf(stderr, "  ✔ %s %s → %s installed%s\n", r.Package, r.From, v, osv)
+		case fix.UpgradePinned:
+			fmt.Fprintf(stderr, "  ✔ %s %s → %s pinned (%s)%s\n", r.Package, r.From, r.To, r.Reason, osv)
+		default:
+			fmt.Fprintf(stderr, "  ✖ %s %s → %s: %s\n", r.Package, r.From, r.To, r.Reason)
+			if h := fix.Headline(r.Detail); h != "" {
+				fmt.Fprintf(stderr, "      %s\n", h)
+			}
+			for _, l := range r.Detail {
+				fmt.Fprintf(stderr, "        %s\n", l)
+			}
+			continue
+		}
+		for _, p := range r.Pins {
+			fmt.Fprintf(stderr, "      %s:%d  %s  →  %s\n", p.File, p.Line, p.Before, p.After)
+		}
+		for _, ir := range r.Install {
+			if ir.Status == fix.InstallOK || ir.Status == fix.InstallDirty {
+				fmt.Fprintf(stderr, "      %s ran in %s\n", ir.Tool, ir.Manifest)
+			}
+		}
+	}
+	fmt.Fprintln(stderr, "\nRe-run the scan to confirm the advisories are cleared.")
 }
 
 // applyAll is the non-interactive path: fix everything fixable, then say
 // exactly what changed and what still needs a human. Returns what it applied,
 // for verification.
-func applyAll(root string, targets []fix.Target) []fix.Result {
+func applyAll(root string, targets []fix.Target, direct bool) []fix.Result {
 	var applied []fix.Result
 	var failed int
 	for _, t := range targets {
@@ -104,7 +195,9 @@ func applyAll(root string, targets []fix.Target) []fix.Result {
 
 	var manual []fix.Target
 	for _, t := range targets {
-		if !t.Fixable {
+		// With --fix-install, a package the package manager can upgrade in
+		// place is not manual: upgradeDirect does it next.
+		if !t.Fixable && !(direct && t.Upgradable()) {
 			manual = append(manual, t)
 		}
 	}

@@ -200,6 +200,11 @@ type Config struct {
 	// meant to close.
 	FixInstall bool
 
+	// FixPinOnly makes a --fix click stop at the manifest edit. By default a
+	// click in the table is a full upgrade: the pin moves, the package manager
+	// installs the new version, and the result is read back and re-checked.
+	FixPinOnly bool
+
 	// CI policy (exit-code contract in docs/cli.md). Nil Policy = no gate:
 	// scan success always exits 0 regardless of findings.
 	Policy   *Policy
@@ -371,7 +376,16 @@ func (c *Config) validateFix() error {
 		if c.FixInstall {
 			return fmt.Errorf("--fix-install installs the fixes --fix or --fix-all made; neither was given")
 		}
+		if c.FixPinOnly {
+			return fmt.Errorf("--fix-pin-only changes what a --fix click does; --fix was not given")
+		}
 		return nil
+	}
+	if c.FixPinOnly && !c.Fix {
+		return fmt.Errorf("--fix-pin-only applies to the --fix table; --fix-all already only rewrites pins unless --fix-install is given")
+	}
+	if c.FixPinOnly && c.FixInstall {
+		return fmt.Errorf("--fix-pin-only and --fix-install contradict each other")
 	}
 	if c.Fix && c.FixAll {
 		return fmt.Errorf("--fix and --fix-all are mutually exclusive: --fix opens the table, --fix-all skips it")

@@ -49,6 +49,20 @@ type Target struct {
 
 	Fixable bool
 	Reason  string // why not, when Fixable is false
+
+	// Direct lists where the package manager can upgrade a package that has no
+	// pin line to rewrite: the project directory of a version range resolved by
+	// a lockfile, or the virtualenv a copy was found installed in. Upgrade asks
+	// the package manager for the exact version there.
+	Direct []Site
+
+	// Set by Resolve, which asks the package registry and OSV which version to
+	// move to. Advisory keeps the fixed version the advisories named; Fixed may
+	// then be raised to the first published release that has no advisory at all.
+	Advisory string
+	Online   Online
+	Latest   string // newest stable release on the registry
+	Note     string // what the online check found, for the detail pane
 }
 
 // Site is one manifest line that pins the vulnerable version.
@@ -182,6 +196,7 @@ func targetFor(c *airom.Component) (Target, bool) {
 	sites, reason := pinSites(c, current)
 	if len(sites) == 0 {
 		t.Reason = reason
+		t.Direct = directSites(c, t.Ecosystem)
 		return t, true
 	}
 	t.Sites = sites
@@ -254,6 +269,49 @@ func pinSites(c *airom.Component, current string) ([]Site, string) {
 		return nil, "no declared manifest pins this version"
 	}
 }
+
+// directSites collects the places a package manager can upgrade an unpinned
+// package in place, one per directory.
+func directSites(c *airom.Component, eco string) []Site {
+	var detectors map[string]bool
+	switch eco {
+	case "npm":
+		// Only where package.json itself declares the package (as a range).
+		// Seen in a lockfile alone it is transitive: `npm install name@x`
+		// would make it a new top-level dependency, which nobody asked for.
+		detectors = map[string]bool{"manifest/npm": true}
+	case "pypi":
+		detectors = map[string]bool{"manifest/pypi-installed": true}
+	default:
+		return nil
+	}
+	seen := map[string]bool{}
+	var out []Site
+	for i := range c.Evidence.Occurrences {
+		o := &c.Evidence.Occurrences[i]
+		if !detectors[o.DetectorID] || o.Location.Path == "" || strings.Contains(o.Location.Path, "node_modules/") {
+			continue
+		}
+		if eco == "pypi" && !strings.Contains(o.Location.Path, "/lib/python") {
+			continue // not inside a virtualenv we can name
+		}
+		key := path.Dir(o.Location.Path)
+		if eco == "pypi" {
+			key = o.Location.Path[:strings.Index(o.Location.Path, "/lib/python")]
+		}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		out = append(out, Site{File: o.Location.Path, Line: o.Location.Line, Snippet: o.Snippet})
+	}
+	sort.SliceStable(out, func(i, j int) bool { return out[i].File < out[j].File })
+	return out
+}
+
+// Upgradable reports whether a click can move this package at all: a pin to
+// rewrite, or a place the package manager can upgrade it directly.
+func (t Target) Upgradable() bool { return t.Fixable || len(t.Direct) > 0 }
 
 // declaresVersion reports whether snippet carries version as a whole token —
 // the same test Apply will apply to the line itself, asked early so the table

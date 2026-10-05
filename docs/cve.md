@@ -61,10 +61,12 @@ manifest pins you choose; **`--fix-all`** applies every fixable one without the
 table, for CI and for terminals that cannot host it.
 
 ```console
-$ airom scan . --fix        # interactive: click [ Fix ] on a row, or press `a` for all
+$ airom scan . --fix        # interactive: click [ Fix ] to upgrade that package, `a` for all
+$ airom scan . --fix --fix-pin-only  # ...a click only rewrites the manifest pin
 $ airom scan . --fix-all    # non-interactive: apply every fixable pin
 $ airom scan . --fix --fix-verify   # ...and confirm the result still resolves
-$ airom scan . --fix-all --fix-install  # ...and actually install them (writes lockfiles)
+$ airom scan . --fix-all --fix-install  # ...and actually install them (writes lockfiles),
+                                        # upgrading range-declared packages in place too
 ```
 
 ```
@@ -88,7 +90,48 @@ fixable package; `q` quits. The detail pane under the table shows the advisory
 on the selected row and the exact manifest line the button would rewrite, so
 the edit is readable before it is made.
 
-**What "fix" means.** One version per package: the **highest** fixed version any
+**What a click does.** In the `--fix` table, clicking `[ Fix ]` (or pressing
+`enter`) **upgrades that package for real**, in one step:
+
+1. the manifest pin is rewritten to the FIX TO version (see below);
+2. the project's own package manager installs it (`pip` into the project
+   `.venv`, `npm`/`pnpm`/`yarn`, `uv sync`, `go mod tidy` — the same table as
+   [`--fix-install`](#making-the-fix-real----fix-install)), so the lockfile and
+   the installed copy move with the pin;
+3. the installed version is read back from the environment and checked against
+   OSV again, and the row shows `✔ upgraded` with the version that is now
+   actually in place, or `! failed` with the package manager's own reason.
+
+If the package manager refuses the new version (an npm `ERESOLVE` peer
+conflict, a pip `No matching distribution`), the pin is **put back**, so the
+manifest never names a version its lockfile and environment do not have. If no
+installer can run (no `.venv` for pip, the tool is not on PATH) the row shows
+`✔ pinned` and says what is missing. `--fix-pin-only` restores the old
+behavior, where a click only rewrites the pin.
+
+A package with **no pin to rewrite** still gets a button when its package
+manager can upgrade it in place: a range in `package.json` (`"openai":
+"^4.0.0"`) is upgraded with `npm install openai@<version>` (pnpm/yarn by
+lockfile), which rewrites the range and the lockfile itself; a copy found
+installed in a virtualenv is upgraded with that virtualenv's `pip`. A package
+seen only in a lockfile is transitive and stays `— manual`: installing it by
+name would add a new top-level dependency.
+
+**Which version: checked online.** The advisory's fixed version only says
+where *that* advisory stops. It does not say the release is published (it can
+be yanked, or only tagged in git) and it does not say the release is clean — a
+version that clears the advisories found on `0.0.310` can carry newer ones the
+scan never asked about. So before the table opens, AIROM lists the package's
+real releases from its registry (PyPI, npm, the Go module proxy, crates.io),
+keeps the stable ones at or above the advisory floor, asks OSV about all of
+them in one batch, and offers the **lowest release with no known advisory**.
+The detail pane says when that differs from the advisory (`advisory says
+5.10.0; first release with no known advisory is 5.10.1`). When no release in
+reach is clean, the lowest one that clears what the scan found is offered and
+the row says how many advisories remain on it. A registry or OSV failure
+degrades that one row to the advisory's own version, with the reason.
+
+**The floor.** One version per package: the **highest** fixed version any
 of that package's advisories names, because bumping to the first one leaves the
 rest open — applied in **every manifest that pins it**, not just one. A package
 declared in an `api/` and a `worker/` requirements.txt is vulnerable through

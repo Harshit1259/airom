@@ -378,3 +378,65 @@ func TestReportNamesEveryTarget(t *testing.T) {
 		}
 	}
 }
+
+// TestClickRunsTheUpgrader: with an Upgrader set, a click is a full upgrade.
+// A package with no pin but a place its package manager can upgrade it gets a
+// live button, and the row reports the version actually installed.
+func TestClickRunsTheUpgrader(t *testing.T) {
+	ts := demo()
+	ts[2].Direct = []fix.Site{{File: "package.json"}}
+	m := newModel(t.TempDir(), ts, plain())
+	var got []string
+	m.upgrade = func(tg fix.Target) fix.UpgradeResult {
+		got = append(got, tg.Package)
+		return fix.UpgradeResult{Package: tg.Package, From: tg.Current, To: tg.Fixed,
+			Status: fix.UpgradeDone, Installed: tg.Fixed, Advisories: 0}
+	}
+	if l := m.actionLabel(2); l != "[ Fix ]" {
+		t.Fatalf("direct-upgradable row shows %q, want a live button", l)
+	}
+	m.cursor = 3 // the "locked" row
+	m.applyCursor()
+	if len(got) != 1 || got[0] != "locked" {
+		t.Fatalf("upgrader calls = %v", got)
+	}
+	if l := m.actionLabel(2); l != "✔ upgraded" {
+		t.Errorf("after the click the row shows %q", l)
+	}
+	if !strings.Contains(m.status, "1.0.0 → 1.1.0 installed") || !strings.Contains(m.status, "no known advisories") {
+		t.Errorf("status = %q", m.status)
+	}
+	if len(m.outcome.Upgrades) != 1 {
+		t.Errorf("outcome.Upgrades = %d", len(m.outcome.Upgrades))
+	}
+}
+
+// TestFailedUpgradeShowsTheToolsReason: a refused install is a failed row
+// carrying the package manager's own explanation, not its closing advice.
+func TestFailedUpgradeShowsTheToolsReason(t *testing.T) {
+	m := newModel(t.TempDir(), demo(), plain())
+	m.upgrade = func(tg fix.Target) fix.UpgradeResult {
+		return fix.UpgradeResult{Package: tg.Package, Status: fix.UpgradeFailed,
+			Reason: "npm could not install it, so the pin was put back",
+			Detail: []string{"npm error Could not resolve dependency:", "npm error peer a@1 from b@2", "npm error retry with --force"}}
+	}
+	m.applyCursor()
+	if l := m.actionLabel(0); l != "! failed" {
+		t.Errorf("label = %q", l)
+	}
+	if !strings.Contains(m.status, "peer a@1 from b@2") || strings.Contains(m.status, "--force") {
+		t.Errorf("status = %q", m.status)
+	}
+}
+
+// TestSameNameDifferentEcosystem: langchain on PyPI and on npm are two
+// packages; the PACKAGE cell has to say which is which.
+func TestSameNameDifferentEcosystem(t *testing.T) {
+	ts := demo()[:1]
+	ts = append(ts, ts[0])
+	ts[1].Ecosystem = "npm"
+	m := newModel(t.TempDir(), ts, plain())
+	if m.labels[0] != "langchain (pypi)" || m.labels[1] != "langchain (npm)" {
+		t.Errorf("labels = %v", m.labels)
+	}
+}

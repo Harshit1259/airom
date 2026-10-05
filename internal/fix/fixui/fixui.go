@@ -25,10 +25,16 @@ var ErrNoTTY = errNoTTY
 // Outcome is what the session did, for the summary the caller prints once the
 // alternate screen is gone and the scroll-back is visible again.
 type Outcome struct {
-	Applied []fix.Result // successful rewrites, in the order they were made
-	Fixed   []string     // package names, one per applied fix
-	Failed  int          // fixes attempted that returned an error
+	Applied  []fix.Result        // successful rewrites, in the order they were made
+	Fixed    []string            // package names, one per applied fix
+	Failed   int                 // fixes attempted that returned an error
+	Upgrades []fix.UpgradeResult // every upgrade attempted, when an Upgrader ran
 }
+
+// Upgrader performs a full upgrade for one package — pin, install, read back —
+// in place of the bare manifest edit. Run calls it synchronously, after drawing
+// a "working" status so the user can see the click was taken.
+type Upgrader func(fix.Target) fix.UpgradeResult
 
 // Run takes over the terminal, draws the advisory table for targets, and
 // applies the fixes the user asks for. root is the scan root every target path
@@ -37,6 +43,12 @@ type Outcome struct {
 // It returns when the user quits. ErrNoTTY (and only ErrNoTTY) means the table
 // never opened.
 func Run(root string, targets []fix.Target) (Outcome, error) {
+	return RunWith(root, targets, nil)
+}
+
+// RunWith is Run with each click doing a real upgrade through up. A nil up
+// keeps the manifest-only edit.
+func RunWith(root string, targets []fix.Target, up Upgrader) (Outcome, error) {
 	if len(targets) == 0 {
 		return Outcome{}, nil
 	}
@@ -47,6 +59,13 @@ func Run(root string, targets []fix.Target) (Outcome, error) {
 	defer s.close()
 
 	m := newModel(root, targets, tui.NewPalette(s.in))
+	m.upgrade = up
+	m.busy = func(msg string) {
+		m.setStatus(statusNone, msg)
+		w, h := s.size()
+		m.layout(w, h)
+		s.paint(m.render(w, h))
+	}
 	r := newReader(s.in)
 	for {
 		w, h := s.size()
@@ -68,6 +87,7 @@ type rowState struct {
 	partial bool // some sites moved and some refused
 	results []fix.Result
 	err     string
+	up      *fix.UpgradeResult // the upgrade this click ran, when an Upgrader is set
 }
 
 // site returns the first applied result, for the one-line summaries.
@@ -109,6 +129,10 @@ type model struct {
 	status  string
 	statusK statusKind
 	outcome Outcome
+
+	labels  []string         // PACKAGE cell per target
+	upgrade Upgrader         // nil: a click only rewrites the pin
+	busy    func(msg string) // redraws with a working status before slow work
 }
 
 type statusKind int
@@ -183,7 +207,26 @@ func newModel(root string, targets []fix.Target, pal tui.Palette) *model {
 		state:   make([]rowState, len(targets)),
 	}
 	m.buildRows()
+	m.labels = packageLabels(targets)
 	return m
+}
+
+// packageLabels names each row's package, adding the ecosystem only where two
+// targets share a name — "langchain" on PyPI and on npm are different packages
+// and a click must not look like it could land on either.
+func packageLabels(ts []fix.Target) []string {
+	n := map[string]int{}
+	for _, t := range ts {
+		n[t.Package]++
+	}
+	out := make([]string, len(ts))
+	for i, t := range ts {
+		out[i] = t.Package
+		if n[t.Package] > 1 && t.Ecosystem != "" {
+			out[i] += " (" + t.Ecosystem + ")"
+		}
+	}
+	return out
 }
 
 func (m *model) buildRows() {
@@ -212,7 +255,7 @@ func (m *model) layout(w, h int) {
 	}
 	for _, r := range m.rows {
 		t := m.targets[r.target]
-		m.grow(colPackage, t.Package)
+		m.grow(colPackage, m.labels[r.target])
 		m.grow(colInstalled, t.Current)
 		m.grow(colFixTo, fixToLabel(t))
 		m.grow(colAction, m.actionLabel(r.target))
@@ -305,6 +348,10 @@ func (m *model) scrollIntoView() {
 // actionLabel is the ACTION cell for a package: what will happen, or what did.
 func (m *model) actionLabel(target int) string {
 	switch st := m.state[target]; {
+	case st.applied && st.up != nil && st.up.Status == fix.UpgradePinned:
+		return "✔ pinned"
+	case st.applied && st.up != nil:
+		return "✔ upgraded"
 	case st.applied:
 		return "✔ fixed"
 	case st.partial:
@@ -314,7 +361,7 @@ func (m *model) actionLabel(target int) string {
 		return "! partial"
 	case st.err != "":
 		return "! failed"
-	case !m.targets[target].Fixable:
+	case !m.targets[target].Fixable && !(m.upgrade != nil && m.targets[target].Upgradable()):
 		return "— manual"
 	default:
 		return "[ Fix ]"
@@ -342,7 +389,7 @@ func (m *model) handle(ev event) {
 	case evtFixAll:
 		m.applyAll()
 	case evtHelp:
-		m.setStatus(statusNone, "↑/↓ or j/k move · enter or click [ Fix ] applies one · a applies every fixable package · q quits")
+		m.setStatus(statusNone, "↑/↓ or j/k move · enter or click [ Fix ] upgrades that package · a upgrades every one that can be · q quits")
 	case evtClick:
 		m.click(ev)
 	}
@@ -377,6 +424,10 @@ func (m *model) applyCursor() {
 		return
 	}
 	st := m.state[t]
+	if st.up != nil {
+		m.setStatus(upgradeStatus(*st.up))
+		return
+	}
 	switch {
 	case st.applied:
 		m.setStatus(statusGood, fmt.Sprintf("%s → %s in %s",
@@ -398,7 +449,7 @@ func (m *model) applyAll() {
 		switch {
 		case m.state[i].applied:
 			continue
-		case !m.targets[i].Fixable:
+		case !m.targets[i].Fixable && !(m.upgrade != nil && m.targets[i].Upgradable()):
 			skipped++
 			continue
 		}
@@ -430,6 +481,9 @@ func (m *model) apply(i int) bool {
 		m.setStatus(statusNone, m.targets[i].Package+" is already fixed")
 		return false
 	}
+	if m.upgrade != nil && m.targets[i].Upgradable() {
+		return m.applyUpgrade(i)
+	}
 	if !m.targets[i].Fixable {
 		reason := m.targets[i].Reason
 		if reason == "" {
@@ -454,6 +508,57 @@ func (m *model) apply(i int) bool {
 		m.outcome.Fixed = append(m.outcome.Fixed, m.targets[i].Package)
 	}
 	return true
+}
+
+// applyUpgrade runs the full upgrade for one package and records what it did.
+func (m *model) applyUpgrade(i int) bool {
+	t := m.targets[i]
+	if m.busy != nil {
+		m.busy(fmt.Sprintf("⟳ upgrading %s %s → %s …", t.Package, t.Current, t.Fixed))
+	}
+	res := m.upgrade(t)
+	m.outcome.Upgrades = append(m.outcome.Upgrades, res)
+	m.outcome.Applied = append(m.outcome.Applied, res.Pins...)
+	switch res.Status {
+	case fix.UpgradeDone, fix.UpgradePinned:
+		m.state[i] = rowState{applied: true, results: res.Pins, up: &res}
+		m.outcome.Fixed = append(m.outcome.Fixed, t.Package)
+	default:
+		m.state[i] = rowState{err: res.Reason, results: res.Pins, up: &res}
+		m.outcome.Failed++
+	}
+	return true
+}
+
+// upgradeStatus is the status line after an upgrade click.
+func upgradeStatus(r fix.UpgradeResult) (statusKind, string) {
+	osv := ""
+	switch {
+	case r.Advisories == 0:
+		osv = " · OSV: no known advisories"
+	case r.Advisories > 0:
+		osv = fmt.Sprintf(" · OSV still lists %d advisor%s", r.Advisories, map[bool]string{true: "y", false: "ies"}[r.Advisories == 1])
+	}
+	switch r.Status {
+	case fix.UpgradeDone:
+		v := r.Installed
+		if v == "" {
+			v = r.To
+		}
+		msg := fmt.Sprintf("%s %s → %s installed%s", r.Package, r.From, v, osv)
+		if r.Reason != "" {
+			msg += " · " + r.Reason
+		}
+		return statusGood, msg
+	case fix.UpgradePinned:
+		return statusGood, fmt.Sprintf("%s → %s: %s%s", r.Package, r.To, r.Reason, osv)
+	default:
+		msg := r.Package + ": " + r.Reason
+		if h := fix.Headline(r.Detail); h != "" {
+			msg += " — " + h
+		}
+		return statusBad, msg
+	}
 }
 
 func (m *model) setStatus(k statusKind, s string) { m.status, m.statusK = s, k }
@@ -538,7 +643,7 @@ func (m *model) counts() (fixable, remaining int) {
 			continue
 		}
 		remaining++
-		if t.Fixable {
+		if t.Fixable || (m.upgrade != nil && t.Upgradable()) {
 			fixable++
 		}
 	}
@@ -597,8 +702,11 @@ func (m *model) bodyRow(i int) string {
 
 	var raw [colCount]string
 	if leads {
-		raw[colPackage] = t.Package
+		raw[colPackage] = m.labels[r.target]
 		raw[colInstalled] = t.Current
+		if st.up != nil && st.up.Installed != "" && st.applied {
+			raw[colInstalled] = st.up.Installed
+		}
 		raw[colFixTo] = fixToLabel(t)
 		raw[colAction] = m.actionLabel(r.target)
 	}
@@ -689,6 +797,10 @@ func (m *model) detail(w int) string {
 	var edit string
 	st := m.state[r.target]
 	switch {
+	case st.applied && st.up != nil && len(st.up.Pins) == 0:
+		for _, ir := range st.up.Install {
+			edit = fmt.Sprintf("%s upgraded %s in %s", ir.Tool, t.Package, ir.Manifest)
+		}
 	case st.applied || st.partial:
 		if res, ok := st.site(); ok {
 			edit = fmt.Sprintf("%s:%d  %s", res.File, res.Line, res.After)
@@ -698,6 +810,9 @@ func (m *model) detail(w int) string {
 				edit += fmt.Sprintf("   (and %d more)", len(st.results)-1)
 			}
 		}
+	case !t.Fixable && m.upgrade != nil && len(t.Direct) > 0:
+		edit = fmt.Sprintf("%s → %s by the package manager, at %s   (%s)",
+			t.Package, t.Fixed, t.Direct[0].File, t.Reason)
 	case !t.Fixable:
 		edit = "no manifest pin to rewrite: " + t.Reason
 	default:
@@ -710,6 +825,9 @@ func (m *model) detail(w int) string {
 		if t.Major {
 			edit += "   [major bump — review for breaking changes]"
 		}
+	}
+	if t.Note != "" && !st.applied {
+		edit += "   · " + t.Note
 	}
 	return truncate(head, w-margin) + "\r\n " + m.pal.Dim.S(truncate(edit, w-margin))
 }
@@ -825,9 +943,36 @@ func Report(targets []fix.Target) string {
 			for _, site := range t.Sites[1:] {
 				fmt.Fprintf(&b, "      also %s\n", site)
 			}
+			if line := onlineLine(t); line != "" {
+				fmt.Fprintf(&b, "      %s\n", line)
+			}
+		} else if len(t.Direct) > 0 {
+			fmt.Fprintf(&b, "  %s %s -> %s: no pin to rewrite (%s); the package manager can upgrade it at %s\n",
+				t.Package, t.Current, t.Fixed, t.Reason, t.Direct[0].File)
+			if line := onlineLine(t); line != "" {
+				fmt.Fprintf(&b, "      %s\n", line)
+			}
 		} else {
 			fmt.Fprintf(&b, "  %s %s: no automatic fix (%s)\n", t.Package, t.Current, t.Reason)
 		}
 	}
 	return b.String()
+}
+
+// onlineLine says what the registry and OSV said about the target version.
+func onlineLine(t fix.Target) string {
+	var s string
+	switch t.Online {
+	case fix.OnlineClean:
+		s = "online: " + t.Fixed + " is published and OSV lists no advisories for it"
+	case fix.OnlineStillVulnerable, fix.OnlineFailed:
+		s = "online: " + t.Note
+		return s
+	default:
+		return t.Note
+	}
+	if t.Note != "" {
+		s += " (" + t.Note + ")"
+	}
+	return s
 }
